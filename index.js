@@ -1,147 +1,108 @@
-require('dotenv').config(); 
-const express = require("express"); 
-const http = require("http"); 
-const { Server } = require("socket.io"); 
-const cors = require("cors"); 
-const mongoose = require("mongoose"); 
-const multer = require("multer"); 
-const { v4: uuidv4 } = require("uuid"); 
-const cloudinary = require("cloudinary").v2; 
-const fs = require("fs"); 
-const bcrypt = require("bcrypt"); 
+<div style="max-width:1000px;margin:20px auto;height:90vh;border-radius:20px;background:rgba(0,255,136,0.1);backdrop-filter:blur(10px);border:2px solid #00ff88;box-shadow:0 0 40px #00ff88;display:flex;overflow:hidden;font-family:'Segoe UI'">
 
-const app = express(); 
-const server = http.createServer(app); 
-const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } }); 
-
-app.use(cors()); 
-app.use(express.json({ limit: '50mb' })); 
-
-// 1. CONNECT CLOUDINARY 
-cloudinary.config({ cloudinary_url: process.env.CLOUDINARY_URL }); 
-
-// 2. CONNECT MONGODB 
-mongoose.connect(process.env.MONGODB_URI) 
-.then(() => console.log("✅ MongoDB Connected")) 
-.catch(err => console.log("❌ DB Error:", err)); 
-
-// 3. DATABASE MODELS 
-const MessageSchema = new mongoose.Schema({ 
-  from: { type: String, required: true }, 
-  to: { type: String }, 
-  group: { type: String }, 
-  text: { type: String }, 
-  type: { type: String, default: "text" }, 
-  fileUrl: { type: String }, 
-  fileName: { type: String }, 
-  timestamp: { type: Date, default: Date.now } 
-}); 
-const Message = mongoose.model("Message", MessageSchema); 
-
-const UserSchema = new mongoose.Schema({ 
-  username: { type: String, required: true }, 
-  email: { type: String, required: true, unique: true }, 
-  pin: { type: String, required: true }, 
-  createdAt: { type: Date, default: Date.now } 
-}); 
-const User = mongoose.model("User", UserSchema); 
-
-// 4. FILE UPLOAD SETUP 
-const storage = multer.diskStorage({ 
-  destination: '/tmp/', 
-  filename: (req, file, cb) => cb(null, uuidv4() + "-" + file.originalname) 
-}); 
-const upload = multer({ storage }); 
-
-// 5. UPLOAD ROUTE -> CLOUDINARY 
-app.post("/upload", upload.single("file"), async (req, res) => { 
-  try { 
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" }); 
-    const result = await cloudinary.uploader.upload(req.file.path, { 
-      resource_type: "auto", folder: "nexus_uploads", use_filename: true 
-    }); 
-    fs.unlinkSync(req.file.path); 
-    res.json({ success: true, url: result.secure_url, public_id: result.public_id }); 
-  } catch (err) { 
-    res.status(500).json({ error: err.message }); 
-  } 
-}); 
-
-// 6. GET CHAT HISTORY - NEW
-app.get("/api/chat/get", async (req, res) => { 
-  try {
-    const { email } = req.query;
-    const messages = await Message.find({ 
-      $or: [{ from: email }, { to: email }] 
-    }).sort({ timestamp: -1 }).limit(50); 
-    res.json({ chats: messages }); 
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 7. BUTTON ROUTES 
-app.post("/api/auth/register", async (req, res) => { 
-  try { 
-    const { username, email, pin } = req.body; 
-    const existing = await User.findOne({ email }); 
-    if (existing) return res.json({ success: false, message: 'User already exists' }); 
-    const hashedPin = await bcrypt.hash(pin, 10); 
-    await User.create({ username, email, pin: hashedPin }); 
-    res.json({ success: true, message: 'Account Created!' }); 
-  } catch (err) { 
-    res.status(500).json({ success: false, message: err.message }); 
-  } 
-}); 
-
-// LOGIN ROUTE - NEW
-app.post("/api/auth/login", async (req, res) => { 
-  try { 
-    const { email, pin } = req.body; 
-    const user = await User.findOne({ email }); 
-    if (!user) return res.json({ success: false, message: 'User not found' }); 
+  <!-- LEFT: AUTH + CONTACTS -->
+  <div style="width:30%;background:linear-gradient(180deg,rgba(0,255,136,0.2),rgba(0,100,50,0.3));border-right:1px solid #00ff88;padding:15px;display:flex;flex-direction:column">
     
-    const isMatch = await bcrypt.compare(pin, user.pin);
-    if (isMatch) {
-      res.json({ success: true, message: 'Login Successful!' });
-    } else {
-      res.json({ success: false, message: 'Invalid PIN' });
-    }
-  } catch (err) { 
-    res.status(500).json({ success: false, message: err.message }); 
-  } 
-}); 
+    <!-- LOGO -->
+    <div style="text-align:center">
+      <label for="profileUpload">
+        <img id="profilePic" src="https://nexusbuildsolutions.rf.gd/wp-content/uploads/2026/08/cropped-Screenshot-2025-09-29-122409.png"
+          style="width:80px;height:80px;border-radius:12px;border:2px solid #00ff88;cursor:pointer">
+      </label>
+      <input id="profileUpload" type="file" accept="image/*" style="display:none" onchange="uploadProfile()">
+      <h3 style="color:#00ff88;margin:5px 0">NEXUS CONNECT</h3>
+    </div>
 
-app.post("/api/chat/send", async (req, res) => { 
-  try { 
-    const { from, to, message } = req.body; 
-    const msg = new Message({ from: from, to: to, text: message }); 
-    await msg.save(); 
-    res.json({ status: 'delivered', message: 'Message Delivered' }); 
-  } catch (err) { 
-    res.status(500).json({ status: 'error', message: err.message }); 
-  } 
-}); 
+    <!-- 1. LOGIN / REGISTER - PROBLEM 8 FIXED -->
+    <div id="authBox">
+      <input id="username" placeholder="Username" style="width:100%;padding:10px;margin:5px 0;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:#fff">
+      <input id="email" placeholder="Email" style="width:100%;padding:10px;margin:5px 0;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:#fff">
+      <input id="pin" type="password" placeholder="4 Digit PIN" maxlength="4" style="width:100%;padding:10px;margin:5px 0;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:#fff">
+      <button onclick="register()" style="width:100%;padding:12px;background:#00ff88;color:#000;border:none;border-radius:8px;font-weight:bold;margin:5px 0">REGISTER</button>
+      <button onclick="login()" style="width:100%;padding:12px;background:#00cc6a;color:#000;border:none;border-radius:8px;font-weight:bold;margin:5px 0">LOGIN</button>
+      <p id="authMsg" style="color:#00ff88;text-align:center"></p>
+    </div>
 
-// 8. HEALTH CHECK 
-app.get("/", (req, res) => { 
-  res.json({ status: "Nexus Pro Engine v4.2 - Login + Dashboard Live" }); 
-}); 
+    <!-- 2. USER SEARCH - PROBLEM 2 FIXED -->
+    <div id="appBox" style="display:none;flex:1;flex-direction:column">
+      <button onclick="createRoom()" style="padding:10px;background:#00ff88;color:#000;border:none;border-radius:8px;font-weight:bold;margin:10px 0">+ Nexus Room</button>
+      <input id="searchUser" onkeyup="searchUsers()" placeholder="Search users..." 
+        style="padding:10px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:#fff;margin-bottom:10px">
+      <div id="userList" style="flex:1;overflow-y:auto"></div>
+    </div>
+  </div>
 
-// 9. SOCKET.IO 
-io.on("connection", (socket) => { 
-  console.log("User connected:", socket.id); 
-  socket.on("join", (userId) => { socket.join(userId); }); 
-  socket.on("sendMessage", async (data) => { 
-    try { 
-      const msg = new Message(data); 
-      await msg.save(); 
-      if(data.to) io.to(data.to).emit("newMessage", msg); 
-      if(data.from) io.to(data.from).emit("newMessage", msg); 
-    } catch (err) { console.log("Socket Error:", err); } 
-  }); 
-  socket.on("disconnect", () => { console.log("User disconnected:", socket.id); }); 
-}); 
+  <!-- RIGHT: CHAT -->
+  <div style="width:70%;display:flex;flex-direction:column;background:#0a0a0a">
+    <div style="padding:15px;border-bottom:1px solid #222">
+      <h3 id="chatTitle" style="color:#00ff88;margin:0">Select a chat</h3>
+    </div>
+    <div id="chatBox" style="flex:1;overflow-y:auto;padding:20px"></div>
+    <div style="padding:15px;background:#111;display:flex;gap:10px">
+      <button onclick="document.getElementById('fileUpload').click()" style="padding:10px;background:#1a1a1a;border:none;border-radius:8px;color:#00ff88">📎</button>
+      <button onclick="recordVoice()" style="padding:10px;background:#1a1a1a;border:none;border-radius:8px;color:#00ff88">🎤</button>
+      <input id="fileUpload" type="file" style="display:none" onchange="sendFile()">
+      <input id="message" type="text" placeholder="Type message..." style="flex:1;padding:12px;border-radius:20px;border:1px solid #333;background:#1a1a1a;color:#fff">
+      <button onclick="sendMsg()" style="width:45px;height:45px;border-radius:50%;background:#00ff88;border:none;color:#000">➤</button>
+    </div>
+  </div>
+</div>
 
-const PORT = process.env.PORT || 10000; 
-server.listen(PORT, () => console.log(`🚀 Nexus running on port ${PORT}`));
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const API = "https://nexusbuildsolutions.onrender.com";
+const socket = io(API);
+let currentUser = null;
+let activeChat = null;
+
+// 1. REGISTER
+async function register(){
+  const res = await fetch(API+"/api/auth/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    username:username.value,email:email.value,pin:pin.value
+  })});
+  const data = await res.json();
+  authMsg.innerText = data.message;
+}
+
+// 2. LOGIN - PROBLEM 8 FIXED
+async function login(){
+  const res = await fetch(API+"/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    email:email.value,pin:pin.value
+  })});
+  const data = await res.json();
+  if(data.success){
+    currentUser = data.user;
+    authBox.style.display="none";
+    appBox.style.display="flex";
+    loadUsers(); // Load all users for search
+  } else authMsg.innerText = "Login Failed";
+}
+
+// 3. LOAD USERS - PROBLEM 2 FIXED
+async function loadUsers(){
+  const res = await fetch(API+"/api/users");
+  const users = await res.json();
+  userList.innerHTML = users.map(u=>`<div onclick="openChat('${u.username}')" style="padding:10px;background:#1a1a1a;margin:5px 0;border-radius:8px;cursor:pointer">@${u.username}</div>`).join('');
+}
+
+// 4. OPEN CHAT - PROBLEM 3 FIXED
+function openChat(user){
+  activeChat = user;
+  chatTitle.innerText = "@"+user;
+  socket.emit("joinRoom", [currentUser.username,user].sort().join('_'));
+  loadMessages();
+}
+
+async function loadMessages(){
+  const res = await fetch(API+`/api/chat/get?user1=${currentUser.username}&user2=${activeChat}`);
+  const msgs = await res.json();
+  chatBox.innerHTML = msgs.map(m=>`<div style="text-align:${m.from===currentUser.username?'right':'left'}"><b>@${m.from}</b>: ${m.text||`<img src=${m.fileUrl} width=200>`}</div>`).join('');
+}
+
+async function sendMsg(){
+  socket.emit("sendMessage",{from:currentUser.username,to:activeChat,text:message.value});
+  message.value="";
+}
+
+socket.on("newMessage", loadMessages); // REALTIME - PROBLEM 3 FIXED
+</script>
