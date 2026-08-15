@@ -1,2034 +1,1259 @@
+// ============================================================
+// NEXUS CONNECT ENGINE
+// Nexus Buildsolutions Limited
+// Secure Real-Time Communication Platform
+//
+// Architecture:
+// Express + MongoDB/Mongoose + Cloudinary + Socket.IO
+// Nodemailer + JWT + bcrypt + security middleware
+// Render compatible / CommonJS
+// ============================================================
+
 require("dotenv").config();
 
 const express = require("express");
 const http = require("http");
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
+const cloudinary = require("cloudinary").v2;
+const multer = require("multer");
 const cors = require("cors");
 const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-const multer = require("multer");
-const nodemailer = require("nodemailer");
 const cookieParser = require("cookie-parser");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 const { Server } = require("socket.io");
-const cloudinary = require("cloudinary").v2;
+const rateLimit = require("express-rate-limit");
+
+
+// ============================================================
+// 1. APPLICATION CONFIGURATION
+// ============================================================
 
 const app = express();
 const server = http.createServer(app);
 
-const PORT = process.env.PORT || 10000;
+const PORT = Number(process.env.PORT || 10000);
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const FRONTEND_URL =
+  process.env.FRONTEND_URL ||
+  "https://nexusbuildsolutions.rf.gd";
 
-if (!JWT_SECRET) {
-    console.error("FATAL ERROR: JWT_SECRET is missing.");
-    process.exit(1);
-}
+const NEXUS_LOGO_URL =
+  "https://nexusbuildsolutions.rf.gd/wp-content/uploads/2026/08/cropped-Screenshot-2025-09-29-122409.png";
 
-/*
-|--------------------------------------------------------------------------
-| SECURITY
-|--------------------------------------------------------------------------
-*/
 
-app.disable("x-powered-by");
+// ============================================================
+// 2. SOCKET.IO
+// ============================================================
+
+const io = new Server(server, {
+  cors: {
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+  }
+});
+
+
+// ============================================================
+// 3. SECURITY / MIDDLEWARE
+// ============================================================
 
 app.use(
-    helmet({
-        crossOriginResourcePolicy: false
-    })
+  helmet({
+    crossOriginResourcePolicy: {
+      policy: "cross-origin"
+    }
+  })
 );
 
 app.use(
-    cors({
-        origin: process.env.FRONTEND_URL
-            ? process.env.FRONTEND_URL.split(",")
-            : true,
-        credentials: true
-    })
+  cors({
+    origin: true,
+    credentials: true
+  })
 );
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-/*
-|--------------------------------------------------------------------------
-| RATE LIMITING
-|--------------------------------------------------------------------------
-*/
+app.use(
+  express.json({
+    limit: "10mb"
+  })
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "10mb"
+  })
+);
+
+
+// ============================================================
+// 4. RATE LIMITING
+// ============================================================
 
 const generalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 300,
-    standardHeaders: true,
-    legacyHeaders: false
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 10,
-    standardHeaders: true,
-    legacyHeaders: false
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
-app.use("/api/", generalLimiter);
-app.use("/api/auth/", authLimiter);
+app.use("/api", generalLimiter);
 
-/*
-|--------------------------------------------------------------------------
-| CLOUDINARY
-|--------------------------------------------------------------------------
-*/
+app.use("/api/auth", authLimiter);
+
+
+// ============================================================
+// 5. ENVIRONMENT VALIDATION
+// ============================================================
+
+const requiredEnvironmentVariables = [
+  "MONGO_URI",
+  "CLOUD_NAME",
+  "CLOUD_KEY",
+  "CLOUD_SECRET",
+  "JWT_SECRET",
+  "SMTP_USER",
+  "SMTP_PASS"
+];
+
+const missingEnvironmentVariables =
+  requiredEnvironmentVariables.filter(
+    (key) => !process.env[key]
+  );
+
+if (missingEnvironmentVariables.length > 0) {
+
+  console.error(
+    "MISSING ENVIRONMENT VARIABLES:",
+    missingEnvironmentVariables.join(", ")
+  );
+
+}
+
+
+// ============================================================
+// 6. CLOUDINARY
+// ============================================================
 
 cloudinary.config({
-    cloud_name: process.env.CLOUD_NAME,
-    api_key: process.env.CLOUD_KEY,
-    api_secret: process.env.CLOUD_SECRET
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_KEY,
+  api_secret: process.env.CLOUD_SECRET
 });
-
-/*
-|--------------------------------------------------------------------------
-| FILE UPLOAD
-|--------------------------------------------------------------------------
-*/
 
 const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 25 * 1024 * 1024
-    }
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024
+  }
 });
 
-/*
-|--------------------------------------------------------------------------
-| MONGODB
-|--------------------------------------------------------------------------
-*/
 
-mongoose.set("strictQuery", true);
+// ============================================================
+// 7. EMAIL ENGINE
+// Nexus Buildsolutions Limited
+// ============================================================
 
-/*
-|--------------------------------------------------------------------------
-| USER MODEL
-|--------------------------------------------------------------------------
-*/
+const transporter = nodemailer.createTransport({
 
-const UserSchema = new mongoose.Schema(
-    {
-        username: {
-            type: String,
-            required: true,
-            unique: true,
-            trim: true,
-            minlength: 3,
-            maxlength: 30
-        },
+  host:
+    process.env.SMTP_HOST ||
+    "smtp.gmail.com",
 
-        email: {
-            type: String,
-            required: true,
-            unique: true,
-            lowercase: true,
-            trim: true
-        },
+  port:
+    Number(process.env.SMTP_PORT || 465),
 
-        passwordHash: {
-            type: String,
-            required: true
-        },
+  secure:
+    String(
+      process.env.SMTP_SECURE || "true"
+    ).toLowerCase() === "true",
 
-        avatar: {
-            type: String,
-            default: ""
-        },
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
 
-        emailVerified: {
-            type: Boolean,
-            default: false
-        },
-
-        verificationTokenHash: {
-            type: String,
-            default: null
-        },
-
-        verificationExpiresAt: {
-            type: Date,
-            default: null
-        },
-
-        lastLoginAt: {
-            type: Date,
-            default: null
-        },
-
-        active: {
-            type: Boolean,
-            default: true
-        }
-    },
-    {
-        timestamps: true
-    }
-);
-
-UserSchema.index({ email: 1 }, { unique: true });
-UserSchema.index({ username: 1 }, { unique: true });
-
-const User = mongoose.model("User", UserSchema);
-
-/*
-|--------------------------------------------------------------------------
-| MESSAGE MODEL
-|--------------------------------------------------------------------------
-*/
-
-const MessageSchema = new mongoose.Schema(
-    {
-        conversationKey: {
-            type: String,
-            required: true,
-            index: true
-        },
-
-        from: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true,
-            index: true
-        },
-
-        to: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true,
-            index: true
-        },
-
-        text: {
-            type: String,
-            default: "",
-            maxlength: 10000
-        },
-
-        fileUrl: {
-            type: String,
-            default: ""
-        },
-
-        fileType: {
-            type: String,
-            default: ""
-        },
-
-        messageType: {
-            type: String,
-            enum: [
-                "text",
-                "image",
-                "file",
-                "voice"
-            ],
-            default: "text"
-        },
-
-        createdAt: {
-            type: Date,
-            default: Date.now,
-            index: true
-        }
-    }
-);
-
-MessageSchema.index({
-    conversationKey: 1,
-    createdAt: 1
 });
 
-const Message = mongoose.model("Message", MessageSchema);
 
-/*
-|--------------------------------------------------------------------------
-| CONVERSATION KEY
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// 8. EMAIL TRANSPORT VERIFICATION
+// ============================================================
 
-function conversationKey(userA, userB) {
-    return [String(userA), String(userB)]
-        .sort()
-        .join("_");
-}
+async function verifyEmailTransport() {
 
-/*
-|--------------------------------------------------------------------------
-| JWT
-|--------------------------------------------------------------------------
-*/
+  try {
 
-function createToken(user) {
-    return jwt.sign(
-        {
-            sub: String(user._id),
-            username: user.username
-        },
-        JWT_SECRET,
-        {
-            expiresIn: "7d"
-        }
-    );
-}
+    await transporter.verify();
 
-function setAuthCookie(res, token) {
-    res.cookie("nexus_session", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite:
-            process.env.NODE_ENV === "production"
-                ? "none"
-                : "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000
-    });
-}
-
-function clearAuthCookie(res) {
-    res.clearCookie("nexus_session");
-}
-
-/*
-|--------------------------------------------------------------------------
-| AUTHENTICATION MIDDLEWARE
-|--------------------------------------------------------------------------
-*/
-
-async function authenticate(req, res, next) {
-    try {
-        const header = req.headers.authorization;
-
-        let token = null;
-
-        if (header && header.startsWith("Bearer ")) {
-            token = header.substring(7);
-        }
-
-        if (!token && req.cookies.nexus_session) {
-            token = req.cookies.nexus_session;
-        }
-
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                message: "Authentication required."
-            });
-        }
-
-        const decoded = jwt.verify(
-            token,
-            JWT_SECRET
-        );
-
-        const user = await User.findById(
-            decoded.sub
-        );
-
-        if (!user || !user.active) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or inactive account."
-            });
-        }
-
-        if (!user.emailVerified) {
-            return res.status(403).json({
-                success: false,
-                message:
-                    "Please verify your email first."
-            });
-        }
-
-        req.user = user;
-
-        next();
-    } catch (error) {
-        return res.status(401).json({
-            success: false,
-            message:
-                "Invalid or expired session."
-        });
-    }
-}
-
-/*
-|--------------------------------------------------------------------------
-| SAFE USER RESPONSE
-|--------------------------------------------------------------------------
-*/
-
-function publicUser(user) {
-    return {
-        id: String(user._id),
-        username: user.username,
-        email: user.email,
-        avatar: user.avatar || "",
-        emailVerified: user.emailVerified,
-        createdAt: user.createdAt
-    };
-}
-
-/*
-|--------------------------------------------------------------------------
-| EMAIL
-|--------------------------------------------------------------------------
-*/
-
-let transporter = null;
-
-if (
-    process.env.SMTP_HOST &&
-    process.env.SMTP_USER &&
-    process.env.SMTP_PASS
-) {
-    transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(
-            process.env.SMTP_PORT || 587
-        ),
-        secure:
-            String(
-                process.env.SMTP_SECURE
-            ) === "true",
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
-        }
-    });
-
-    console.log("SMTP: CONFIGURED");
-} else {
     console.log(
-        "SMTP: NOT CONFIGURED - email verification cannot send real emails yet."
+      "NEXUS EMAIL: SMTP CONNECTION READY"
     );
+
+  } catch (error) {
+
+    console.error(
+      "NEXUS EMAIL: SMTP ERROR:",
+      error.message
+    );
+
+  }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| SEND VERIFICATION EMAIL
-|--------------------------------------------------------------------------
-*/
 
-async function sendVerificationEmail(
-    user,
-    rawToken
-) {
-    if (!transporter) {
-        throw new Error(
-            "SMTP is not configured."
-        );
-    }
+// ============================================================
+// 9. PROFESSIONAL NEXUS EMAIL TEMPLATE
+// ============================================================
 
-    const verificationBase =
-        process.env.EMAIL_VERIFY_URL ||
-        `${process.env.BACKEND_URL || ""}/api/auth/verify`;
+function nexusEmailTemplate({
 
-    const verificationUrl =
-        `${verificationBase}?token=${encodeURIComponent(
-            rawToken
-        )}`;
+  title,
+  greeting,
+  message,
+  buttonText,
+  buttonUrl,
+  footerMessage =
+    "Nexus Buildsolutions Limited"
 
+}) {
+
+  return `
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+
+<title>${title}</title>
+
+<style>
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #f4f7f6;
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+  color: #17211f;
+}
+
+.email-wrapper {
+  width: 100%;
+  padding: 40px 15px;
+  box-sizing: border-box;
+}
+
+.email-card {
+  max-width: 620px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 20px;
+  overflow: hidden;
+
+  box-shadow:
+    0 12px 40px
+    rgba(0, 0, 0, 0.08);
+}
+
+.header {
+  background:
+    linear-gradient(
+      135deg,
+      #063d2e,
+      #008f5a
+    );
+
+  padding: 35px 25px;
+  text-align: center;
+}
+
+.logo {
+  width: 120px;
+  max-width: 45%;
+  height: auto;
+  background: #ffffff;
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.brand {
+  margin-top: 15px;
+  color: #ffffff;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.content {
+  padding: 40px 35px;
+}
+
+h1 {
+  margin-top: 0;
+  color: #063d2e;
+  font-size: 28px;
+  line-height: 1.3;
+}
+
+p {
+  color: #4b5754;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.action {
+  text-align: center;
+  margin: 32px 0;
+}
+
+.button {
+  display: inline-block;
+  padding: 15px 28px;
+
+  background: #008f5a;
+  color: #ffffff !important;
+
+  text-decoration: none;
+
+  border-radius: 10px;
+
+  font-weight: 700;
+}
+
+.security {
+  margin-top: 25px;
+  padding: 15px;
+
+  background: #f1f8f5;
+
+  border-radius: 10px;
+
+  color: #52625d;
+
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.footer {
+  border-top:
+    1px solid #e5ebe8;
+
+  padding: 22px;
+
+  text-align: center;
+
+  color: #77817e;
+
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="email-wrapper">
+
+<div class="email-card">
+
+<div class="header">
+
+<img
+  class="logo"
+  src="${NEXUS_LOGO_URL}"
+  alt="Nexus Buildsolutions Limited"
+>
+
+<div class="brand">
+NEXUS BUILDSOLUTIONS LIMITED
+</div>
+
+</div>
+
+<div class="content">
+
+<h1>
+${title}
+</h1>
+
+<p>
+${greeting}
+</p>
+
+<p>
+${message}
+</p>
+
+${
+  buttonUrl
+    ? `
+
+<div class="action">
+
+<a
+  class="button"
+  href="${buttonUrl}"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+${buttonText}
+</a>
+
+</div>
+
+`
+    : ""
+}
+
+<div class="security">
+
+<strong>
+Security Notice
+</strong>
+
+<br>
+
+Nexus Connect will never ask you
+to disclose your password or
+verification code to another person.
+
+</div>
+
+</div>
+
+<div class="footer">
+
+${footerMessage}
+
+<br><br>
+
+Secure communication infrastructure
+powered by Nexus Connect.
+
+</div>
+
+</div>
+
+</div>
+
+</body>
+
+</html>
+
+`;
+
+}
+
+
+// ============================================================
+// 10. CENTRAL EMAIL SENDER
+// ============================================================
+
+async function sendNexusEmail({
+
+  to,
+  subject,
+  title,
+  greeting,
+  message,
+  buttonText,
+  buttonUrl
+
+}) {
+
+  if (!to) {
+
+    throw new Error(
+      "Recipient email is required."
+    );
+
+  }
+
+  const html =
+    nexusEmailTemplate({
+
+      title,
+      greeting,
+      message,
+      buttonText,
+      buttonUrl
+
+    });
+
+
+  const info =
     await transporter.sendMail({
-        from:
-            process.env.MAIL_FROM ||
-            `"Nexus Buildsolutions Limited" <${process.env.SMTP_USER}>`,
 
-        to: user.email,
+      from:
+        process.env.MAIL_FROM ||
+        process.env.SMTP_USER,
 
-        subject:
-            "Verify your Nexus Connect account",
+      to,
 
-        text:
-            `Welcome to Nexus Connect.\n\n` +
-            `Please verify your account using this link:\n\n` +
-            `${verificationUrl}\n\n` +
-            `This verification link expires in 30 minutes.`,
+      subject,
 
-        html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
-                <h2>Nexus Connect</h2>
+      html,
 
-                <p>Hello ${user.username},</p>
+      text:
+`${title}
 
-                <p>
-                    Welcome to Nexus Connect.
-                    Please verify your email address to activate your account.
-                </p>
+${greeting}
 
-                <p>
-                    <a
-                        href="${verificationUrl}"
-                        style="
-                            display:inline-block;
-                            padding:12px 20px;
-                            background:#008f5a;
-                            color:white;
-                            text-decoration:none;
-                            border-radius:8px;
-                        "
-                    >
-                        Verify My Account
-                    </a>
-                </p>
+${message}
 
-                <p>
-                    This verification link expires in 30 minutes.
-                </p>
+${buttonUrl || ""}
 
-                <p>
-                    Nexus Buildsolutions Limited
-                </p>
-            </div>
-        `
+Nexus Buildsolutions Limited
+Nexus Connect`
+
     });
+
+
+  console.log(
+    "NEXUS EMAIL SENT:",
+    info.messageId,
+    "TO:",
+    to
+  );
+
+
+  return info;
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| HEALTH CHECK
-|--------------------------------------------------------------------------
-*/
 
-app.get("/", (req, res) => {
-    res.json({
-        success: true,
-        service: "Nexus Connect",
-        engine: "NEXUS ENGINE v2030",
-        status: "online"
-    });
-});
+// ============================================================
+// 11. MONGOOSE DATABASE MODELS
+// ============================================================
 
-app.get("/health", (req, res) => {
-    res.json({
-        success: true,
-        server: "online",
-        mongodb:
-            mongoose.connection.readyState === 1
-                ? "connected"
-                : "disconnected"
-    });
-});
+const userSchema =
+  new mongoose.Schema(
 
-/*
-|--------------------------------------------------------------------------
-| REGISTER
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-    "/api/auth/register",
-    async (req, res) => {
-        try {
-            const {
-                username,
-                email,
-                password
-            } = req.body;
-
-            if (
-                !username ||
-                !email ||
-                !password
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Username, email and password are required."
-                });
-            }
-
-            const cleanUsername =
-                String(username).trim();
-
-            const cleanEmail =
-                String(email)
-                    .trim()
-                    .toLowerCase();
-
-            if (
-                !/^[a-zA-Z0-9_]{3,30}$/.test(
-                    cleanUsername
-                )
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Username must be 3-30 characters and contain only letters, numbers or underscore."
-                });
-            }
-
-            if (password.length < 8) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Password must contain at least 8 characters."
-                });
-            }
-
-            const existingEmail =
-                await User.findOne({
-                    email: cleanEmail
-                });
-
-            if (existingEmail) {
-                return res.status(409).json({
-                    success: false,
-                    message:
-                        "Email is already registered."
-                });
-            }
-
-            const existingUsername =
-                await User.findOne({
-                    username:
-                        cleanUsername
-                });
-
-            if (existingUsername) {
-                return res.status(409).json({
-                    success: false,
-                    message:
-                        "Username is already taken."
-                });
-            }
-
-            const passwordHash =
-                await bcrypt.hash(
-                    password,
-                    12
-                );
-
-            const rawVerificationToken =
-                crypto.randomBytes(32).toString(
-                    "hex"
-                );
-
-            const verificationTokenHash =
-                crypto
-                    .createHash("sha256")
-                    .update(
-                        rawVerificationToken
-                    )
-                    .digest("hex");
-
-            const user = new User({
-                username:
-                    cleanUsername,
-                email: cleanEmail,
-                passwordHash,
-                verificationTokenHash,
-                verificationExpiresAt:
-                    new Date(
-                        Date.now() +
-                            30 * 60 * 1000
-                    )
-            });
-
-            await user.save();
-
-            let emailSent = false;
-
-            try {
-                await sendVerificationEmail(
-                    user,
-                    rawVerificationToken
-                );
-
-                emailSent = true;
-            } catch (mailError) {
-                console.error(
-                    "VERIFICATION EMAIL ERROR:",
-                    mailError.message
-                );
-            }
-
-            return res.status(201).json({
-                success: true,
-                message: emailSent
-                    ? "Registration successful. Check your email to verify your account."
-                    : "Registration created, but email verification service is not configured yet.",
-                user: publicUser(user),
-                emailVerificationRequired:
-                    true,
-                emailSent
-            });
-        } catch (error) {
-            console.error(
-                "REGISTER ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                success: false,
-                message:
-                    "Registration failed."
-            });
-        }
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| VERIFY EMAIL
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-    "/api/auth/verify",
-    async (req, res) => {
-        try {
-            const rawToken =
-                req.query.token;
-
-            if (!rawToken) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Verification token is missing."
-                });
-            }
-
-            const tokenHash =
-                crypto
-                    .createHash("sha256")
-                    .update(
-                        String(rawToken)
-                    )
-                    .digest("hex");
-
-            const user =
-                await User.findOne({
-                    verificationTokenHash:
-                        tokenHash,
-
-                    verificationExpiresAt: {
-                        $gt: new Date()
-                    }
-                });
-
-            if (!user) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Verification link is invalid or expired."
-                });
-            }
-
-            user.emailVerified =
-                true;
-
-            user.verificationTokenHash =
-                null;
-
-            user.verificationExpiresAt =
-                null;
-
-            await user.save();
-
-            res.json({
-                success: true,
-                message:
-                    "Email verified successfully. Your Nexus Connect account is now active."
-            });
-        } catch (error) {
-            console.error(
-                "VERIFY ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                success: false,
-                message:
-                    "Email verification failed."
-            });
-        }
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| LOGIN
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-    "/api/auth/login",
-    async (req, res) => {
-        try {
-            const {
-                email,
-                password
-            } = req.body;
-
-            if (!email || !password) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Email and password are required."
-                });
-            }
-
-            const user =
-                await User.findOne({
-                    email:
-                        String(email)
-                            .trim()
-                            .toLowerCase()
-                });
-
-            if (!user) {
-                return res.status(401).json({
-                    success: false,
-                    message:
-                        "Invalid email or password."
-                });
-            }
-
-            const passwordCorrect =
-                await bcrypt.compare(
-                    password,
-                    user.passwordHash
-                );
-
-            if (!passwordCorrect) {
-                return res.status(401).json({
-                    success: false,
-                    message:
-                        "Invalid email or password."
-                });
-            }
-
-            if (!user.emailVerified) {
-                return res.status(403).json({
-                    success: false,
-                    message:
-                        "Please verify your email before logging in."
-                });
-            }
-
-            user.lastLoginAt =
-                new Date();
-
-            await user.save();
-
-            const token =
-                createToken(user);
-
-            setAuthCookie(
-                res,
-                token
-            );
-
-            res.json({
-                success: true,
-                message:
-                    "Login successful.",
-                user:
-                    publicUser(user)
-            });
-        } catch (error) {
-            console.error(
-                "LOGIN ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                success: false,
-                message:
-                    "Login failed."
-            });
-        }
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| CURRENT USER
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-    "/api/auth/me",
-    authenticate,
-    async (req, res) => {
-        res.json({
-            success: true,
-            user:
-                publicUser(req.user)
-        });
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| LOGOUT
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-    "/api/auth/logout",
-    authenticate,
-    async (req, res) => {
-        clearAuthCookie(res);
-
-        res.json({
-            success: true,
-            message:
-                "Logged out successfully."
-        });
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| USERS
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-    "/api/users",
-    authenticate,
-    async (req, res) => {
-        try {
-            const users =
-                await User.find({
-                    active: true,
-                    emailVerified: true
-                })
-                    .select(
-                        "_id username email avatar emailVerified createdAt"
-                    )
-                    .sort({
-                        username: 1
-                    });
-
-            res.json({
-                success: true,
-                users
-            });
-        } catch (error) {
-            console.error(
-                "USERS ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                success: false,
-                message:
-                    "Unable to load users."
-            });
-        }
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| PRIVATE CHAT HISTORY
-|--------------------------------------------------------------------------
-*/
-
-app.get(
-    "/api/chat/get",
-    authenticate,
-    async (req, res) => {
-        try {
-            const otherUserId =
-                req.query.user;
-
-            const page = Math.max(
-                Number(req.query.page || 1),
-                1
-            );
-
-            const limit = Math.min(
-                Math.max(
-                    Number(
-                        req.query.limit || 50
-                    ),
-                    1
-                ),
-                100
-            );
-
-            if (!otherUserId) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "User ID is required."
-                });
-            }
-
-            if (
-                !mongoose.Types.ObjectId.isValid(
-                    otherUserId
-                )
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid user ID."
-                });
-            }
-
-            const otherUser =
-                await User.findOne({
-                    _id: otherUserId,
-                    active: true,
-                    emailVerified: true
-                });
-
-            if (!otherUser) {
-                return res.status(404).json({
-                    success: false,
-                    message:
-                        "Verified user not found."
-                });
-            }
-
-            const room =
-                conversationKey(
-                    req.user._id,
-                    otherUser._id
-                );
-
-            const total =
-                await Message.countDocuments({
-                    conversationKey:
-                        room
-                });
-
-            const messages =
-                await Message.find({
-                    conversationKey:
-                        room
-                })
-                    .sort({
-                        createdAt: -1
-                    })
-                    .skip(
-                        (page - 1) * limit
-                    )
-                    .limit(limit)
-                    .populate(
-                        "from",
-                        "_id username avatar"
-                    );
-
-            messages.reverse();
-
-            res.json({
-                success: true,
-                conversationKey:
-                    room,
-                page,
-                limit,
-                total,
-                hasMore:
-                    page * limit <
-                    total,
-                messages
-            });
-        } catch (error) {
-            console.error(
-                "CHAT HISTORY ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                success: false,
-                message:
-                    "Unable to load conversation."
-            });
-        }
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| SEND MESSAGE - HTTP
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-    "/api/chat/send",
-    authenticate,
-    async (req, res) => {
-        try {
-            const {
-                to,
-                text = "",
-                fileUrl = "",
-                fileType = "",
-                messageType = "text"
-            } = req.body;
-
-            if (!to) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Recipient is required."
-                });
-            }
-
-            if (
-                !mongoose.Types.ObjectId.isValid(
-                    to
-                )
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid recipient."
-                });
-            }
-
-            const recipient =
-                await User.findOne({
-                    _id: to,
-                    active: true,
-                    emailVerified: true
-                });
-
-            if (!recipient) {
-                return res.status(404).json({
-                    success: false,
-                    message:
-                        "Recipient not found or not verified."
-                });
-            }
-
-            const allowedTypes = [
-                "text",
-                "image",
-                "file",
-                "voice"
-            ];
-
-            if (
-                !allowedTypes.includes(
-                    messageType
-                )
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid message type."
-                });
-            }
-
-            if (
-                !text &&
-                !fileUrl
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Message must contain text or media."
-                });
-            }
-
-            const room =
-                conversationKey(
-                    req.user._id,
-                    recipient._id
-                );
-
-            const message =
-                await Message.create({
-                    conversationKey:
-                        room,
-
-                    from:
-                        req.user._id,
-
-                    to:
-                        recipient._id,
-
-                    text:
-                        String(text).slice(
-                            0,
-                            10000
-                        ),
-
-                    fileUrl,
-
-                    fileType,
-
-                    messageType
-                });
-
-            const populated =
-                await message.populate(
-                    "from",
-                    "_id username avatar"
-                );
-
-            io.to(
-                `user:${recipient._id}`
-            ).emit(
-                "message:new",
-                populated
-            );
-
-            io.to(
-                `user:${req.user._id}`
-            ).emit(
-                "message:new",
-                populated
-            );
-
-            res.status(201).json({
-                success: true,
-                message:
-                    populated
-            });
-        } catch (error) {
-            console.error(
-                "SEND MESSAGE ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                success: false,
-                message:
-                    "Message could not be sent."
-            });
-        }
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| CLOUDINARY UPLOAD
-|--------------------------------------------------------------------------
-*/
-
-app.post(
-    "/api/upload",
-    authenticate,
-    upload.single("file"),
-    async (req, res) => {
-        try {
-            if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "No file uploaded."
-                });
-            }
-
-            const result =
-                await new Promise(
-                    (
-                        resolve,
-                        reject
-                    ) => {
-                        const stream =
-                            cloudinary
-                                .uploader
-                                .upload_stream(
-                                    {
-                                        resource_type:
-                                            "auto"
-                                    },
-                                    (
-                                        error,
-                                        result
-                                    ) => {
-                                        if (
-                                            error
-                                        ) {
-                                            reject(
-                                                error
-                                            );
-                                        } else {
-                                            resolve(
-                                                result
-                                            );
-                                        }
-                                    }
-                                );
-
-                        stream.end(
-                            req.file.buffer
-                        );
-                    }
-                );
-
-            res.json({
-                success: true,
-                url:
-                    result.secure_url,
-                publicId:
-                    result.public_id,
-                resourceType:
-                    result.resource_type,
-                originalName:
-                    req.file.originalname
-            });
-        } catch (error) {
-            console.error(
-                "UPLOAD ERROR:",
-                error
-            );
-
-            res.status(500).json({
-                success: false,
-                message:
-                    "Media upload failed."
-            });
-        }
-    }
-);
-
-/*
-|--------------------------------------------------------------------------
-| SOCKET.IO
-|--------------------------------------------------------------------------
-*/
-
-const io = new Server(
-    server,
     {
-        cors: {
-            origin:
-                process.env.FRONTEND_URL
-                    ? process.env.FRONTEND_URL.split(
-                          ","
-                      )
-                    : true,
-            credentials: true
-        }
+
+      username: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true,
+        minlength: 3,
+        maxlength: 40,
+        index: true
+      },
+
+      email: {
+        type: String,
+        required: true,
+        unique: true,
+        lowercase: true,
+        trim: true,
+        index: true
+      },
+
+      passwordHash: {
+        type: String,
+        required: true
+      },
+
+      avatar: {
+        type: String,
+        default: ""
+      },
+
+      emailVerified: {
+        type: Boolean,
+        default: false,
+        index: true
+      },
+
+      verificationTokenHash: {
+        type: String,
+        default: null
+      },
+
+      verificationExpiresAt: {
+        type: Date,
+        default: null
+      },
+
+      lastLoginAt: {
+        type: Date,
+        default: null
+      }
+
+    },
+
+    {
+      timestamps: true
     }
+
+  );
+
+
+const messageSchema =
+  new mongoose.Schema(
+
+    {
+
+      from: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+        index: true
+      },
+
+      to: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+        index: true
+      },
+
+      room: {
+        type: String,
+        required: true,
+        index: true
+      },
+
+      text: {
+        type: String,
+        default: "",
+        maxlength: 10000
+      },
+
+      fileUrl: {
+        type: String,
+        default: ""
+      },
+
+      fileType: {
+        type: String,
+        default: ""
+      },
+
+      messageType: {
+        type: String,
+        enum: [
+          "text",
+          "image",
+          "file",
+          "voice",
+          "system"
+        ],
+        default: "text"
+      }
+
+    },
+
+    {
+      timestamps: true
+    }
+
+  );
+
+
+const groupSchema =
+  new mongoose.Schema(
+
+    {
+
+      name: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 100
+      },
+
+      members: [
+        {
+          type:
+            mongoose.Schema.Types.ObjectId,
+          ref: "User"
+        }
+      ],
+
+      createdBy: {
+        type:
+          mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+      }
+
+    },
+
+    {
+      timestamps: true
+    }
+
+  );
+
+
+const User =
+  mongoose.model(
+    "User",
+    userSchema
+  );
+
+const Message =
+  mongoose.model(
+    "Message",
+    messageSchema
+  );
+
+const Group =
+  mongoose.model(
+    "Group",
+    groupSchema
+  );
+
+
+// ============================================================
+// 12. DATABASE CONNECTION
+// ============================================================
+
+async function connectDatabase() {
+
+  try {
+
+    await mongoose.connect(
+      process.env.MONGO_URI
+    );
+
+    console.log(
+      "NEXUS DATABASE: MONGODB CONNECTED"
+    );
+
+  } catch (error) {
+
+    console.error(
+      "NEXUS DATABASE ERROR:",
+      error.message
+    );
+
+    process.exit(1);
+
+  }
+
+}
+
+
+// ============================================================
+// 13. JWT HELPER
+// ============================================================
+
+function createAccessToken(user) {
+
+  return jwt.sign(
+
+    {
+      sub: user._id.toString(),
+      username: user.username,
+      email: user.email
+    },
+
+    process.env.JWT_SECRET,
+
+    {
+      expiresIn:
+        process.env.JWT_EXPIRES_IN ||
+        "7d"
+    }
+
+  );
+
+}
+
+
+// ============================================================
+// 14. BASIC HEALTH CHECK
+// ============================================================
+
+app.get(
+  "/",
+  (req, res) => {
+
+    res.json({
+
+      success: true,
+
+      service:
+        "Nexus Connect",
+
+      company:
+        "Nexus Buildsolutions Limited",
+
+      status:
+        "online",
+
+      engine:
+        "Nexus Connect Engine",
+
+      version:
+        "2.0.0"
+
+    });
+
+  }
 );
 
-/*
-|--------------------------------------------------------------------------
-| SOCKET AUTHENTICATION
-|--------------------------------------------------------------------------
-*/
 
-io.use(
-    async (
-        socket,
-        next
-    ) => {
-        try {
-            let token =
-                socket.handshake
-                    .auth?.token;
+app.get(
+  "/api/health",
+  (req, res) => {
 
-            if (
-                !token &&
-                socket.handshake
-                    .headers
-                    .cookie
-            ) {
-                const cookies =
-                    Object.fromEntries(
-                        socket.handshake.headers.cookie
-                            .split(";")
-                            .map(
-                                (part) => {
-                                    const index =
-                                        part.indexOf(
-                                            "="
-                                        );
+    res.json({
 
-                                    return [
-                                        part
-                                            .slice(
-                                                0,
-                                                index
-                                            )
-                                            .trim(),
-                                        decodeURIComponent(
-                                            part.slice(
-                                                index +
-                                                    1
-                                            )
-                                        )
-                                    ];
-                                }
-                            )
-                    );
+      success: true,
 
-                token =
-                    cookies.nexus_session;
+      database:
+        mongoose.connection.readyState === 1
+          ? "connected"
+          : "disconnected",
+
+      email:
+        "configured",
+
+      cloudinary:
+        process.env.CLOUD_NAME
+          ? "configured"
+          : "missing",
+
+      timestamp:
+        new Date().toISOString()
+
+    });
+
+  }
+);
+
+
+// ============================================================
+// 15. AUTHENTICATION — REGISTRATION FOUNDATION
+// ============================================================
+
+app.post(
+  "/api/auth/register",
+  async (req, res) => {
+
+    try {
+
+      const {
+        username,
+        email,
+        password
+      } = req.body;
+
+
+      if (
+        !username ||
+        !email ||
+        !password
+      ) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          message:
+            "Username, email and password are required."
+
+        });
+
+      }
+
+
+      if (password.length < 8) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          message:
+            "Password must contain at least 8 characters."
+
+        });
+
+      }
+
+
+      const normalizedEmail =
+        email.trim().toLowerCase();
+
+      const normalizedUsername =
+        username.trim();
+
+
+      const existingUser =
+        await User.findOne({
+
+          $or: [
+            {
+              email:
+                normalizedEmail
+            },
+
+            {
+              username:
+                normalizedUsername
             }
+          ]
 
-            if (!token) {
-                return next(
-                    new Error(
-                        "Authentication required."
-                    )
-                );
-            }
+        });
 
-            const decoded =
-                jwt.verify(
-                    token,
-                    JWT_SECRET
-                );
 
-            const user =
-                await User.findOne({
-                    _id: decoded.sub,
-                    active: true,
-                    emailVerified:
-                        true
-                });
+      if (existingUser) {
 
-            if (!user) {
-                return next(
-                    new Error(
-                        "Invalid or unverified user."
-                    )
-                );
-            }
+        return res.status(409).json({
 
-            socket.user =
-                user;
+          success: false,
 
-            next();
-        } catch (error) {
-            next(
-                new Error(
-                    "Socket authentication failed."
-                )
+          message:
+            "Username or email is already registered."
+
+        });
+
+      }
+
+
+      const passwordHash =
+        await bcrypt.hash(
+          password,
+          12
+        );
+
+
+      const user =
+        await User.create({
+
+          username:
+            normalizedUsername,
+
+          email:
+            normalizedEmail,
+
+          passwordHash,
+
+          emailVerified:
+            false
+
+        });
+
+
+      return res.status(201).json({
+
+        success: true,
+
+        message:
+          "Account created. Email verification will be completed in the authentication layer.",
+
+        user: {
+
+          id:
+            user._id,
+
+          username:
+            user.username,
+
+          email:
+            user.email,
+
+          emailVerified:
+            user.emailVerified
+
+        }
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "REGISTRATION ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+
+        success: false,
+
+        message:
+          "Registration failed."
+
+      });
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// 16. CLOUDINARY UPLOAD FOUNDATION
+// ============================================================
+
+app.post(
+  "/api/upload",
+  upload.single("file"),
+  async (req, res) => {
+
+    try {
+
+      if (!req.file) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          message:
+            "No file supplied."
+
+        });
+
+      }
+
+
+      const result =
+        await new Promise(
+          (resolve, reject) => {
+
+            const stream =
+              cloudinary.uploader.upload_stream(
+
+                {
+                  resource_type:
+                    "auto"
+                },
+
+                (error, result) => {
+
+                  if (error) {
+                    reject(error);
+                  } else {
+                    resolve(result);
+                  }
+
+                }
+
+              );
+
+
+            stream.end(
+              req.file.buffer
             );
-        }
+
+          }
+        );
+
+
+      return res.json({
+
+        success: true,
+
+        url:
+          result.secure_url,
+
+        publicId:
+          result.public_id,
+
+        resourceType:
+          result.resource_type
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "UPLOAD ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+
+        success: false,
+
+        message:
+          "Media upload failed."
+
+      });
+
     }
+
+  }
 );
 
-/*
-|--------------------------------------------------------------------------
-| ONLINE PRESENCE
-|--------------------------------------------------------------------------
-*/
 
-const onlineUsers =
-    new Map();
-
-function addOnlineUser(
-    userId,
-    socketId
-) {
-    const key =
-        String(userId);
-
-    if (
-        !onlineUsers.has(
-            key
-        )
-    ) {
-        onlineUsers.set(
-            key,
-            new Set()
-        );
-    }
-
-    onlineUsers
-        .get(key)
-        .add(socketId);
-}
-
-function removeOnlineUser(
-    userId,
-    socketId
-) {
-    const key =
-        String(userId);
-
-    const sockets =
-        onlineUsers.get(key);
-
-    if (!sockets) {
-        return false;
-    }
-
-    sockets.delete(
-        socketId
-    );
-
-    if (
-        sockets.size === 0
-    ) {
-        onlineUsers.delete(
-            key
-        );
-
-        return true;
-    }
-
-    return false;
-}
-
-function isUserOnline(
-    userId
-) {
-    const sockets =
-        onlineUsers.get(
-            String(userId)
-        );
-
-    return !!(
-        sockets &&
-        sockets.size
-    );
-}
-
-/*
-|--------------------------------------------------------------------------
-| SOCKET EVENTS
-|--------------------------------------------------------------------------
-*/
+// ============================================================
+// 17. SOCKET.IO REALTIME FOUNDATION
+// ============================================================
 
 io.on(
-    "connection",
-    (socket) => {
-        const currentUserId =
-            String(
-                socket.user._id
-            );
+  "connection",
+  (socket) => {
 
-        addOnlineUser(
-            currentUserId,
-            socket.id
-        );
+    console.log(
+      "NEXUS SOCKET CONNECTED:",
+      socket.id
+    );
+
+
+    socket.on(
+      "joinRoom",
+      (room) => {
+
+        if (
+          typeof room !== "string" ||
+          !room.trim()
+        ) {
+          return;
+        }
 
         socket.join(
-            `user:${currentUserId}`
+          room.trim()
         );
 
-        socket.emit(
-            "presence:self",
-            {
-                online: true
-            }
-        );
+      }
+    );
+
+
+    socket.on(
+      "disconnect",
+      () => {
 
         console.log(
-            `Socket connected: ${socket.user.username}`
+          "NEXUS SOCKET DISCONNECTED:",
+          socket.id
         );
 
-        /*
-        |--------------------------------------------------------------------------
-        | PRIVATE ROOM
-        |--------------------------------------------------------------------------
-        */
+      }
+    );
 
-        socket.on(
-            "joinPrivateRoom",
-            async (
-                otherUserId,
-                callback
-            ) => {
-                try {
-                    if (
-                        !mongoose.Types.ObjectId.isValid(
-                            otherUserId
-                        )
-                    ) {
-                        throw new Error(
-                            "Invalid user ID."
-                        );
-                    }
-
-                    const otherUser =
-                        await User.findOne(
-                            {
-                                _id:
-                                    otherUserId,
-                                active:
-                                    true,
-                                emailVerified:
-                                    true
-                            }
-                        );
-
-                    if (!otherUser) {
-                        throw new Error(
-                            "Verified user not found."
-                        );
-                    }
-
-                    const room =
-                        conversationKey(
-                            socket.user
-                                ._id,
-                            otherUser
-                                ._id
-                        );
-
-                    socket.join(
-                        room
-                    );
-
-                    socket.emit(
-                        "presence:user",
-                        {
-                            userId:
-                                String(
-                                    otherUser._id
-                                ),
-                            online:
-                                isUserOnline(
-                                    otherUser._id
-                                )
-                        }
-                    );
-
-                    if (
-                        typeof callback ===
-                        "function"
-                    ) {
-                        callback({
-                            success:
-                                true,
-                            room,
-                            otherUser:
-                                publicUser(
-                                    otherUser
-                                )
-                        });
-                    }
-                } catch (error) {
-                    if (
-                        typeof callback ===
-                        "function"
-                    ) {
-                        callback({
-                            success:
-                                false,
-                            message:
-                                error.message
-                        });
-                    }
-                }
-            }
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | LEAVE PRIVATE ROOM
-        |--------------------------------------------------------------------------
-        */
-
-        socket.on(
-            "leavePrivateRoom",
-            async (
-                otherUserId
-            ) => {
-                try {
-                    if (
-                        !mongoose.Types.ObjectId.isValid(
-                            otherUserId
-                        )
-                    ) {
-                        return;
-                    }
-
-                    const room =
-                        conversationKey(
-                            socket.user
-                                ._id,
-                            otherUserId
-                        );
-
-                    socket.leave(
-                        room
-                    );
-                } catch (error) {
-                    console.error(
-                        "LEAVE ROOM ERROR:",
-                        error
-                    );
-                }
-            }
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | CHECK USER PRESENCE
-        |--------------------------------------------------------------------------
-        */
-
-        socket.on(
-            "presence:check",
-            async (
-                userId,
-                callback
-            ) => {
-                try {
-                    if (
-                        !mongoose.Types.ObjectId.isValid(
-                            userId
-                        )
-                    ) {
-                        throw new Error(
-                            "Invalid user ID."
-                        );
-                    }
-
-                    const user =
-                        await User.findOne(
-                            {
-                                _id:
-                                    userId,
-                                active:
-                                    true,
-                                emailVerified:
-                                    true
-                            }
-                        ).select(
-                            "_id username avatar"
-                        );
-
-                    if (!user) {
-                        throw new Error(
-                            "User not found."
-                        );
-                    }
-
-                    if (
-                        typeof callback ===
-                        "function"
-                    ) {
-                        callback({
-                            success:
-                                true,
-                            userId:
-                                String(
-                                    user._id
-                                ),
-                            online:
-                                isUserOnline(
-                                    user._id
-                                )
-                        });
-                    }
-                } catch (error) {
-                    if (
-                        typeof callback ===
-                        "function"
-                    ) {
-                        callback({
-                            success:
-                                false,
-                            message:
-                                error.message
-                        });
-                    }
-                }
-            }
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | REAL-TIME MESSAGE
-        |--------------------------------------------------------------------------
-        */
-
-        socket.on(
-            "message:send",
-            async (
-                data,
-                callback
-            ) => {
-                try {
-                    const {
-                        to,
-                        text = "",
-                        fileUrl = "",
-                        fileType = "",
-                        messageType =
-                            "text"
-                    } =
-                        data || {};
-
-                    if (!to) {
-                        throw new Error(
-                            "Recipient is required."
-                        );
-                    }
-
-                    if (
-                        !mongoose.Types.ObjectId.isValid(
-                            to
-                        )
-                    ) {
-                        throw new Error(
-                            "Invalid recipient."
-                        );
-                    }
-
-                    const recipient =
-                        await User.findOne(
-                            {
-                                _id: to,
-                                active:
-                                    true,
-                                emailVerified:
-                                    true
-                            }
-                        );
-
-                    if (!recipient) {
-                        throw new Error(
-                            "Recipient is unavailable."
-                        );
-                    }
-
-                    const allowedTypes =
-                        [
-                            "text",
-                            "image",
-                            "file",
-                            "voice"
-                        ];
-
-                    if (
-                        !allowedTypes.includes(
-                            messageType
-                        )
-                    ) {
-                        throw new Error(
-                            "Invalid message type."
-                        );
-                    }
-
-                    if (
-                        !text &&
-                        !fileUrl
-                    ) {
-                        throw new Error(
-                            "Empty message."
-                        );
-                    }
-
-                    const room =
-                        conversationKey(
-                            socket.user
-                                ._id,
-                            recipient
-                                ._id
-                        );
-
-                    const message =
-                        await Message.create(
-                            {
-                                conversationKey:
-                                    room,
-
-                                from:
-                                    socket.user
-                                        ._id,
-
-                                to:
-                                    recipient
-                                        ._id,
-
-                                text:
-                                    String(
-                                        text
-                                    ).slice(
-                                        0,
-                                        10000
-                                    ),
-
-                                fileUrl,
-
-                                fileType,
-
-                                messageType
-                            }
-                        );
-
-                    const populated =
-                        await message.populate(
-                            "from",
-                            "_id username avatar"
-                        );
-
-                    /*
-                    |----------------------------------------------------------
-                    | DELIVER TO RECIPIENT
-                    |----------------------------------------------------------
-                    */
-
-                    io.to(
-                        `user:${recipient._id}`
-                    ).emit(
-                        "message:new",
-                        populated
-                    );
-
-                    /*
-                    |----------------------------------------------------------
-                    | CONFIRM TO SENDER
-                    |----------------------------------------------------------
-                    */
-
-                    if (
-                        typeof callback ===
-                        "function"
-                    ) {
-                        callback({
-                            success:
-                                true,
-                            message:
-                                populated
-                        });
-                    }
-
-                    /*
-                    |----------------------------------------------------------
-                    | PRESENCE INFORMATION
-                    |----------------------------------------------------------
-                    */
-
-                    io.to(
-                        `user:${recipient._id}`
-                    ).emit(
-                        "conversation:activity",
-                        {
-                            from:
-                                String(
-                                    socket.user
-                                        ._id
-                                ),
-                            conversationKey:
-                                room
-                        }
-                    );
-                } catch (error) {
-                    console.error(
-                        "SOCKET MESSAGE ERROR:",
-                        error
-                    );
-
-                    if (
-                        typeof callback ===
-                        "function"
-                    ) {
-                        callback({
-                            success:
-                                false,
-                            message:
-                                error.message ||
-                                "Message failed."
-                        });
-                    }
-                }
-            }
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | DISCONNECT
-        |--------------------------------------------------------------------------
-        */
-
-        socket.on(
-            "disconnect",
-            () => {
-                const becameOffline =
-                    removeOnlineUser(
-                        currentUserId,
-                        socket.id
-                    );
-
-                if (
-                    becameOffline
-                ) {
-                    io.emit(
-                        "presence:changed",
-                        {
-                            userId:
-                                currentUserId,
-                            online:
-                                false
-                        }
-                    );
-                }
-
-                console.log(
-                    `Socket disconnected: ${socket.user.username}`
-                );
-            }
-        );
-    }
+  }
 );
 
-/*
-|--------------------------------------------------------------------------
-| DATABASE + SERVER START
-|--------------------------------------------------------------------------
-*/
+
+// ============================================================
+// 18. GLOBAL ERROR HANDLER
+// ============================================================
+
+app.use(
+  (error, req, res, next) => {
+
+    console.error(
+      "NEXUS SERVER ERROR:",
+      error
+    );
+
+
+    if (res.headersSent) {
+      return next(error);
+    }
+
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        "An internal server error occurred."
+
+    });
+
+  }
+);
+
+
+// ============================================================
+// 19. STARTUP
+// ============================================================
 
 async function startServer() {
-    try {
-        await mongoose.connect(
-            process.env.MONGO_URI
+
+  try {
+
+    await connectDatabase();
+
+    await verifyEmailTransport();
+
+
+    server.listen(
+      PORT,
+      () => {
+
+        console.log(
+          "=================================================="
         );
 
         console.log(
-            "================================"
+          "NEXUS CONNECT ENGINE LIVE"
         );
 
         console.log(
-            "NEXUS CONNECT"
+          `PORT: ${PORT}`
         );
 
         console.log(
-            "MongoDB: CONNECTED"
+          `FRONTEND: ${FRONTEND_URL}`
         );
 
         console.log(
-            "Cloudinary:",
-            process.env.CLOUD_NAME
-                ? "CONFIGURED"
-                : "NOT CONFIGURED"
+          "MONGODB: READY"
         );
 
         console.log(
-            "SMTP:",
-            transporter
-                ? "CONFIGURED"
-                : "NOT CONFIGURED"
+          "CLOUDINARY: READY"
         );
 
         console.log(
-            "================================"
+          "EMAIL ENGINE: READY"
         );
 
-        server.listen(
-            PORT,
-            "0.0.0.0",
-            () => {
-                console.log(
-                    `NEXUS ENGINE v2030 LIVE ON PORT ${PORT}`
-                );
-            }
-        );
-    } catch (error) {
-        console.error(
-            "SERVER STARTUP FAILED:",
-            error
+        console.log(
+          "SOCKET.IO: READY"
         );
 
-        process.exit(1);
-    }
+        console.log(
+          "=================================================="
+        );
+
+      }
+    );
+
+  } catch (error) {
+
+    console.error(
+      "NEXUS STARTUP FAILED:",
+      error
+    );
+
+    process.exit(1);
+
+  }
+
 }
+
 
 startServer();
