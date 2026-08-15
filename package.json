@@ -1,7 +1,7 @@
 {
   "name": "nexus-connect",
-  "version": "1.0.0",
-  "description": "Nexus Connect - secure real-time communication platform for Nexus Buildsolutions Limited",
+  "version": "2.0.0",
+  "description": "Nexus Connect secure real-time communication platform",
   "private": true,
   "main": "index.js",
   "scripts": {
@@ -14,6 +14,7 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.7.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
@@ -22,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
     "multer": "^2.0.2",
+    "nodemailer": "^7.0.5",
     "socket.io": "^4.8.1"
   }
 }
