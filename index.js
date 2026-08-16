@@ -1,12 +1,22 @@
 // ============================================================
 // NEXUS CONNECT ENGINE
 // Nexus Buildsolutions Limited
-// Secure Real-Time Communication Platform
+//
+// PHASE 2A — REAL AUTHENTICATION & SECURITY
 //
 // Architecture:
-// Express + MongoDB/Mongoose + Cloudinary + Socket.IO
-// Nodemailer + JWT + bcrypt + security middleware
-// Render compatible / CommonJS
+// Express
+// MongoDB / Mongoose
+// bcrypt
+// JWT
+// HTTP-only cookies
+// Nodemailer / Gmail SMTP
+// Cloudinary
+// Socket.IO
+// Helmet
+// Rate Limiting
+//
+// Render-compatible CommonJS architecture
 // ============================================================
 
 require("dotenv").config();
@@ -22,18 +32,22 @@ const cookieParser = require("cookie-parser");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
-const { Server } = require("socket.io");
+const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
+const { Server } = require("socket.io");
 
 
 // ============================================================
-// 1. APPLICATION CONFIGURATION
+// 1. APPLICATION
 // ============================================================
 
 const app = express();
-const server = http.createServer(app);
 
-const PORT = Number(process.env.PORT || 10000);
+const server =
+  http.createServer(app);
+
+const PORT =
+  Number(process.env.PORT || 10000);
 
 const FRONTEND_URL =
   process.env.FRONTEND_URL ||
@@ -42,22 +56,39 @@ const FRONTEND_URL =
 const NEXUS_LOGO_URL =
   "https://nexusbuildsolutions.rf.gd/wp-content/uploads/2026/08/cropped-Screenshot-2025-09-29-122409.png";
 
+const JWT_EXPIRES_IN =
+  process.env.JWT_EXPIRES_IN ||
+  "7d";
+
+const COOKIE_NAME =
+  "nexus_access";
+
 
 // ============================================================
 // 2. SOCKET.IO
 // ============================================================
 
-const io = new Server(server, {
-  cors: {
-    origin: true,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
-  }
-});
+const io =
+  new Server(server, {
+
+    cors: {
+
+      origin: FRONTEND_URL,
+
+      credentials: true,
+
+      methods: [
+        "GET",
+        "POST"
+      ]
+
+    }
+
+  });
 
 
 // ============================================================
-// 3. SECURITY / MIDDLEWARE
+// 3. SECURITY MIDDLEWARE
 // ============================================================
 
 app.use(
@@ -68,20 +99,43 @@ app.use(
   })
 );
 
+
 app.use(
   cors({
-    origin: true,
-    credentials: true
+
+    origin: FRONTEND_URL,
+
+    credentials: true,
+
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS"
+    ],
+
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization"
+    ]
+
   })
 );
 
-app.use(cookieParser());
+
+app.use(
+  cookieParser()
+);
+
 
 app.use(
   express.json({
     limit: "10mb"
   })
 );
+
 
 app.use(
   express.urlencoded({
@@ -95,45 +149,80 @@ app.use(
 // 4. RATE LIMITING
 // ============================================================
 
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 300,
-  standardHeaders: true,
-  legacyHeaders: false
-});
+const generalLimiter =
+  rateLimit({
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false
-});
+    windowMs:
+      15 * 60 * 1000,
 
-app.use("/api", generalLimiter);
+    limit: 300,
 
-app.use("/api/auth", authLimiter);
+    standardHeaders: true,
+
+    legacyHeaders: false
+
+  });
+
+
+const authLimiter =
+  rateLimit({
+
+    windowMs:
+      15 * 60 * 1000,
+
+    limit: 20,
+
+    standardHeaders: true,
+
+    legacyHeaders: false
+
+  });
+
+
+app.use(
+  "/api",
+  generalLimiter
+);
+
+
+app.use(
+  "/api/auth",
+  authLimiter
+);
 
 
 // ============================================================
-// 5. ENVIRONMENT VALIDATION
+// 5. ENVIRONMENT CHECK
 // ============================================================
 
 const requiredEnvironmentVariables = [
+
   "MONGO_URI",
+
   "CLOUD_NAME",
+
   "CLOUD_KEY",
+
   "CLOUD_SECRET",
+
   "JWT_SECRET",
+
   "SMTP_USER",
+
   "SMTP_PASS"
+
 ];
+
 
 const missingEnvironmentVariables =
   requiredEnvironmentVariables.filter(
     (key) => !process.env[key]
   );
 
-if (missingEnvironmentVariables.length > 0) {
+
+if (
+  missingEnvironmentVariables.length
+) {
 
   console.error(
     "MISSING ENVIRONMENT VARIABLES:",
@@ -148,48 +237,72 @@ if (missingEnvironmentVariables.length > 0) {
 // ============================================================
 
 cloudinary.config({
-  cloud_name: process.env.CLOUD_NAME,
-  api_key: process.env.CLOUD_KEY,
-  api_secret: process.env.CLOUD_SECRET
+
+  cloud_name:
+    process.env.CLOUD_NAME,
+
+  api_key:
+    process.env.CLOUD_KEY,
+
+  api_secret:
+    process.env.CLOUD_SECRET
+
 });
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 50 * 1024 * 1024
-  }
-});
+
+const upload =
+  multer({
+
+    storage:
+      multer.memoryStorage(),
+
+    limits: {
+
+      fileSize:
+        50 * 1024 * 1024
+
+    }
+
+  });
 
 
 // ============================================================
 // 7. EMAIL ENGINE
-// Nexus Buildsolutions Limited
 // ============================================================
 
-const transporter = nodemailer.createTransport({
+const transporter =
+  nodemailer.createTransport({
 
-  host:
-    process.env.SMTP_HOST ||
-    "smtp.gmail.com",
+    host:
+      process.env.SMTP_HOST ||
+      "smtp.gmail.com",
 
-  port:
-    Number(process.env.SMTP_PORT || 465),
+    port:
+      Number(
+        process.env.SMTP_PORT || 465
+      ),
 
-  secure:
-    String(
-      process.env.SMTP_SECURE || "true"
-    ).toLowerCase() === "true",
+    secure:
+      String(
+        process.env.SMTP_SECURE ||
+        "true"
+      ).toLowerCase() === "true",
 
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
+    auth: {
 
-});
+      user:
+        process.env.SMTP_USER,
+
+      pass:
+        process.env.SMTP_PASS
+
+    }
+
+  });
 
 
 // ============================================================
-// 8. EMAIL TRANSPORT VERIFICATION
+// 8. EMAIL VERIFICATION
 // ============================================================
 
 async function verifyEmailTransport() {
@@ -205,7 +318,7 @@ async function verifyEmailTransport() {
   } catch (error) {
 
     console.error(
-      "NEXUS EMAIL: SMTP ERROR:",
+      "NEXUS EMAIL ERROR:",
       error.message
     );
 
@@ -215,18 +328,20 @@ async function verifyEmailTransport() {
 
 
 // ============================================================
-// 9. PROFESSIONAL NEXUS EMAIL TEMPLATE
+// 9. EMAIL TEMPLATE
 // ============================================================
 
 function nexusEmailTemplate({
 
   title,
+
   greeting,
+
   message,
+
   buttonText,
-  buttonUrl,
-  footerMessage =
-    "Nexus Buildsolutions Limited"
+
+  buttonUrl
 
 }) {
 
@@ -241,8 +356,8 @@ function nexusEmailTemplate({
 <meta charset="UTF-8">
 
 <meta
-  name="viewport"
-  content="width=device-width, initial-scale=1.0"
+name="viewport"
+content="width=device-width,initial-scale=1.0"
 >
 
 <title>${title}</title>
@@ -250,125 +365,174 @@ function nexusEmailTemplate({
 <style>
 
 body {
-  margin: 0;
-  padding: 0;
-  background: #f4f7f6;
-  font-family:
-    Arial,
-    Helvetica,
-    sans-serif;
-  color: #17211f;
+
+margin:0;
+
+padding:0;
+
+background:#f4f7f6;
+
+font-family:
+Arial,
+Helvetica,
+sans-serif;
+
+color:#17211f;
+
 }
 
 .email-wrapper {
-  width: 100%;
-  padding: 40px 15px;
-  box-sizing: border-box;
+
+width:100%;
+
+padding:40px 15px;
+
+box-sizing:border-box;
+
 }
 
 .email-card {
-  max-width: 620px;
-  margin: 0 auto;
-  background: #ffffff;
-  border-radius: 20px;
-  overflow: hidden;
 
-  box-shadow:
-    0 12px 40px
-    rgba(0, 0, 0, 0.08);
+max-width:620px;
+
+margin:auto;
+
+background:#ffffff;
+
+border-radius:20px;
+
+overflow:hidden;
+
+box-shadow:
+0 12px 40px
+rgba(0,0,0,.08);
+
 }
 
 .header {
-  background:
-    linear-gradient(
-      135deg,
-      #063d2e,
-      #008f5a
-    );
 
-  padding: 35px 25px;
-  text-align: center;
+background:
+linear-gradient(
+135deg,
+#063d2e,
+#008f5a
+);
+
+padding:35px 25px;
+
+text-align:center;
+
 }
 
 .logo {
-  width: 120px;
-  max-width: 45%;
-  height: auto;
-  background: #ffffff;
-  padding: 8px;
-  border-radius: 12px;
+
+width:120px;
+
+max-width:45%;
+
+height:auto;
+
+background:#ffffff;
+
+padding:8px;
+
+border-radius:12px;
+
 }
 
 .brand {
-  margin-top: 15px;
-  color: #ffffff;
-  font-size: 21px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
+
+margin-top:15px;
+
+color:#ffffff;
+
+font-size:21px;
+
+font-weight:700;
+
 }
 
 .content {
-  padding: 40px 35px;
+
+padding:40px 35px;
+
 }
 
 h1 {
-  margin-top: 0;
-  color: #063d2e;
-  font-size: 28px;
-  line-height: 1.3;
+
+margin-top:0;
+
+font-size:28px;
+
+color:#063d2e;
+
 }
 
 p {
-  color: #4b5754;
-  font-size: 15px;
-  line-height: 1.7;
+
+font-size:15px;
+
+line-height:1.7;
+
+color:#4b5754;
+
 }
 
 .action {
-  text-align: center;
-  margin: 32px 0;
+
+text-align:center;
+
+margin:32px 0;
+
 }
 
 .button {
-  display: inline-block;
-  padding: 15px 28px;
 
-  background: #008f5a;
-  color: #ffffff !important;
+display:inline-block;
 
-  text-decoration: none;
+padding:15px 28px;
 
-  border-radius: 10px;
+background:#008f5a;
 
-  font-weight: 700;
+color:#ffffff !important;
+
+text-decoration:none;
+
+border-radius:10px;
+
+font-weight:700;
+
 }
 
 .security {
-  margin-top: 25px;
-  padding: 15px;
 
-  background: #f1f8f5;
+margin-top:25px;
 
-  border-radius: 10px;
+padding:15px;
 
-  color: #52625d;
+background:#f1f8f5;
 
-  font-size: 13px;
-  line-height: 1.6;
+border-radius:10px;
+
+font-size:13px;
+
+color:#52625d;
+
 }
 
 .footer {
-  border-top:
-    1px solid #e5ebe8;
 
-  padding: 22px;
+border-top:
+1px solid #e5ebe8;
 
-  text-align: center;
+padding:22px;
 
-  color: #77817e;
+text-align:center;
 
-  font-size: 12px;
-  line-height: 1.6;
+font-size:12px;
+
+color:#77817e;
+
 }
 
 </style>
@@ -384,13 +548,15 @@ p {
 <div class="header">
 
 <img
-  class="logo"
-  src="${NEXUS_LOGO_URL}"
-  alt="Nexus Buildsolutions Limited"
+class="logo"
+src="${NEXUS_LOGO_URL}"
+alt="Nexus Buildsolutions Limited"
 >
 
 <div class="brand">
+
 NEXUS BUILDSOLUTIONS LIMITED
+
 </div>
 
 </div>
@@ -409,26 +575,20 @@ ${greeting}
 ${message}
 </p>
 
-${
-  buttonUrl
-    ? `
-
 <div class="action">
 
 <a
-  class="button"
-  href="${buttonUrl}"
-  target="_blank"
-  rel="noopener noreferrer"
+class="button"
+href="${buttonUrl}"
+target="_blank"
+rel="noopener noreferrer"
 >
+
 ${buttonText}
+
 </a>
 
 </div>
-
-`
-    : ""
-}
 
 <div class="security">
 
@@ -448,7 +608,7 @@ verification code to another person.
 
 <div class="footer">
 
-${footerMessage}
+Nexus Buildsolutions Limited
 
 <br><br>
 
@@ -471,17 +631,23 @@ powered by Nexus Connect.
 
 
 // ============================================================
-// 10. CENTRAL EMAIL SENDER
+// 10. SEND EMAIL
 // ============================================================
 
 async function sendNexusEmail({
 
   to,
+
   subject,
+
   title,
+
   greeting,
+
   message,
+
   buttonText,
+
   buttonUrl
 
 }) {
@@ -494,13 +660,18 @@ async function sendNexusEmail({
 
   }
 
+
   const html =
     nexusEmailTemplate({
 
       title,
+
       greeting,
+
       message,
+
       buttonText,
+
       buttonUrl
 
     });
@@ -520,13 +691,14 @@ async function sendNexusEmail({
       html,
 
       text:
+
 `${title}
 
 ${greeting}
 
 ${message}
 
-${buttonUrl || ""}
+${buttonUrl}
 
 Nexus Buildsolutions Limited
 Nexus Connect`
@@ -536,9 +708,7 @@ Nexus Connect`
 
   console.log(
     "NEXUS EMAIL SENT:",
-    info.messageId,
-    "TO:",
-    to
+    info.messageId
   );
 
 
@@ -548,7 +718,7 @@ Nexus Connect`
 
 
 // ============================================================
-// 11. MONGOOSE DATABASE MODELS
+// 11. USER DATABASE MODEL
 // ============================================================
 
 const userSchema =
@@ -557,63 +727,116 @@ const userSchema =
     {
 
       username: {
+
         type: String,
+
         required: true,
+
         unique: true,
+
         trim: true,
+
         minlength: 3,
+
         maxlength: 40,
+
         index: true
+
       },
+
 
       email: {
+
         type: String,
+
         required: true,
+
         unique: true,
+
         lowercase: true,
+
         trim: true,
+
         index: true
+
       },
+
 
       passwordHash: {
+
         type: String,
-        required: true
+
+        required: true,
+
+        select: false
+
       },
+
 
       avatar: {
+
         type: String,
+
         default: ""
+
       },
+
 
       emailVerified: {
+
         type: Boolean,
+
         default: false,
+
         index: true
+
       },
+
 
       verificationTokenHash: {
+
         type: String,
-        default: null
+
+        default: null,
+
+        select: false
+
       },
+
 
       verificationExpiresAt: {
+
         type: Date,
-        default: null
+
+        default: null,
+
+        select: false
+
       },
 
+
       lastLoginAt: {
+
         type: Date,
+
         default: null
+
       }
 
     },
 
     {
+
       timestamps: true
+
     }
 
   );
 
+
+// ============================================================
+// 12. MESSAGE MODEL
+// ============================================================
 
 const messageSchema =
   new mongoose.Schema(
@@ -621,61 +844,109 @@ const messageSchema =
     {
 
       from: {
-        type: mongoose.Schema.Types.ObjectId,
+
+        type:
+          mongoose.Schema.Types.ObjectId,
+
         ref: "User",
+
         required: true,
+
         index: true
+
       },
+
 
       to: {
-        type: mongoose.Schema.Types.ObjectId,
+
+        type:
+          mongoose.Schema.Types.ObjectId,
+
         ref: "User",
+
         default: null,
+
         index: true
+
       },
+
 
       room: {
+
         type: String,
+
         required: true,
+
         index: true
+
       },
+
 
       text: {
+
         type: String,
+
         default: "",
+
         maxlength: 10000
+
       },
+
 
       fileUrl: {
+
         type: String,
+
         default: ""
+
       },
+
 
       fileType: {
+
         type: String,
+
         default: ""
+
       },
 
+
       messageType: {
+
         type: String,
+
         enum: [
+
           "text",
+
           "image",
+
           "file",
+
           "voice",
+
           "system"
+
         ],
+
         default: "text"
+
       }
 
     },
 
     {
+
       timestamps: true
+
     }
 
   );
 
+
+// ============================================================
+// 13. GROUP MODEL
+// ============================================================
 
 const groupSchema =
   new mongoose.Schema(
@@ -683,35 +954,57 @@ const groupSchema =
     {
 
       name: {
+
         type: String,
+
         required: true,
+
         trim: true,
+
         maxlength: 100
+
       },
 
+
       members: [
+
         {
+
           type:
             mongoose.Schema.Types.ObjectId,
+
           ref: "User"
+
         }
+
       ],
 
+
       createdBy: {
+
         type:
           mongoose.Schema.Types.ObjectId,
+
         ref: "User",
+
         required: true
+
       }
 
     },
 
     {
+
       timestamps: true
+
     }
 
   );
 
+
+// ============================================================
+// 14. MODELS
+// ============================================================
 
 const User =
   mongoose.model(
@@ -719,11 +1012,13 @@ const User =
     userSchema
   );
 
+
 const Message =
   mongoose.model(
     "Message",
     messageSchema
   );
+
 
 const Group =
   mongoose.model(
@@ -733,7 +1028,7 @@ const Group =
 
 
 // ============================================================
-// 12. DATABASE CONNECTION
+// 15. DATABASE
 // ============================================================
 
 async function connectDatabase() {
@@ -763,25 +1058,52 @@ async function connectDatabase() {
 
 
 // ============================================================
-// 13. JWT HELPER
+// 16. SECURITY HELPERS
 // ============================================================
+
+function hashToken(token) {
+
+  return crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+}
+
+
+function generateVerificationToken() {
+
+  return crypto
+    .randomBytes(32)
+    .toString("hex");
+
+}
+
 
 function createAccessToken(user) {
 
   return jwt.sign(
 
     {
-      sub: user._id.toString(),
-      username: user.username,
-      email: user.email
+
+      sub:
+        user._id.toString(),
+
+      username:
+        user.username,
+
+      email:
+        user.email
+
     },
 
     process.env.JWT_SECRET,
 
     {
+
       expiresIn:
-        process.env.JWT_EXPIRES_IN ||
-        "7d"
+        JWT_EXPIRES_IN
+
     }
 
   );
@@ -790,7 +1112,160 @@ function createAccessToken(user) {
 
 
 // ============================================================
-// 14. BASIC HEALTH CHECK
+// 17. SESSION COOKIE
+// ============================================================
+
+function setAuthCookie(
+  res,
+  token
+) {
+
+  res.cookie(
+
+    COOKIE_NAME,
+
+    token,
+
+    {
+
+      httpOnly: true,
+
+      secure: true,
+
+      sameSite: "none",
+
+      maxAge:
+        7 * 24 * 60 * 60 * 1000,
+
+      path: "/"
+
+    }
+
+  );
+
+}
+
+
+function clearAuthCookie(res) {
+
+  res.clearCookie(
+
+    COOKIE_NAME,
+
+    {
+
+      httpOnly: true,
+
+      secure: true,
+
+      sameSite: "none",
+
+      path: "/"
+
+    }
+
+  );
+
+}
+
+
+// ============================================================
+// 18. AUTHENTICATION MIDDLEWARE
+// ============================================================
+
+async function authenticateRequest(
+  req,
+  res,
+  next
+) {
+
+  try {
+
+    const token =
+      req.cookies[COOKIE_NAME];
+
+
+    if (!token) {
+
+      return res.status(401).json({
+
+        success: false,
+
+        message:
+          "Authentication required."
+
+      });
+
+    }
+
+
+    const decoded =
+      jwt.verify(
+
+        token,
+
+        process.env.JWT_SECRET
+
+      );
+
+
+    const user =
+      await User.findById(
+        decoded.sub
+      );
+
+
+    if (!user) {
+
+      return res.status(401).json({
+
+        success: false,
+
+        message:
+          "Account no longer exists."
+
+      });
+
+    }
+
+
+    if (!user.emailVerified) {
+
+      return res.status(403).json({
+
+        success: false,
+
+        message:
+          "Email verification is required."
+
+      });
+
+    }
+
+
+    req.user = user;
+
+
+    next();
+
+  } catch (error) {
+
+    return res.status(401).json({
+
+      success: false,
+
+      message:
+        "Invalid or expired session."
+
+    });
+
+  }
+
+}
+
+
+// ============================================================
+// 19. PUBLIC HEALTH CHECK
 // ============================================================
 
 app.get(
@@ -814,7 +1289,10 @@ app.get(
         "Nexus Connect Engine",
 
       version:
-        "2.0.0"
+        "2.1.0",
+
+      authentication:
+        "enabled"
 
     });
 
@@ -835,13 +1313,18 @@ app.get(
           ? "connected"
           : "disconnected",
 
-      email:
-        "configured",
-
       cloudinary:
         process.env.CLOUD_NAME
           ? "configured"
           : "missing",
+
+      email:
+        process.env.SMTP_USER
+          ? "configured"
+          : "missing",
+
+      authentication:
+        "enabled",
 
       timestamp:
         new Date().toISOString()
@@ -853,7 +1336,7 @@ app.get(
 
 
 // ============================================================
-// 15. AUTHENTICATION — REGISTRATION FOUNDATION
+// 20. REAL REGISTRATION
 // ============================================================
 
 app.post(
@@ -887,7 +1370,53 @@ app.post(
       }
 
 
-      if (password.length < 8) {
+      const cleanUsername =
+        String(username).trim();
+
+
+      const cleanEmail =
+        String(email)
+          .trim()
+          .toLowerCase();
+
+
+      if (
+        !/^[a-zA-Z0-9._-]{3,40}$/
+          .test(cleanUsername)
+      ) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          message:
+            "Username must contain 3-40 letters, numbers, dots, underscores or hyphens."
+
+        });
+
+      }
+
+
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/
+          .test(cleanEmail)
+      ) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          message:
+            "Please provide a valid email address."
+
+        });
+
+      }
+
+
+      if (
+        String(password).length < 8
+      ) {
 
         return res.status(400).json({
 
@@ -901,26 +1430,21 @@ app.post(
       }
 
 
-      const normalizedEmail =
-        email.trim().toLowerCase();
-
-      const normalizedUsername =
-        username.trim();
-
-
       const existingUser =
         await User.findOne({
 
           $or: [
+
             {
               email:
-                normalizedEmail
+                cleanEmail
             },
 
             {
               username:
-                normalizedUsername
+                cleanUsername
             }
+
           ]
 
         });
@@ -933,7 +1457,7 @@ app.post(
           success: false,
 
           message:
-            "Username or email is already registered."
+            "That username or email is already registered."
 
         });
 
@@ -947,21 +1471,96 @@ app.post(
         );
 
 
+      const verificationToken =
+        generateVerificationToken();
+
+
+      const verificationTokenHash =
+        hashToken(
+          verificationToken
+        );
+
+
+      const verificationExpiresAt =
+        new Date(
+          Date.now() +
+          30 * 60 * 1000
+        );
+
+
       const user =
         await User.create({
 
           username:
-            normalizedUsername,
+            cleanUsername,
 
           email:
-            normalizedEmail,
+            cleanEmail,
 
           passwordHash,
 
           emailVerified:
-            false
+            false,
+
+          verificationTokenHash,
+
+          verificationExpiresAt
 
         });
+
+
+      const verificationUrl =
+        `${FRONTEND_URL}/?nexus_verify=${verificationToken}`;
+
+
+      try {
+
+        await sendNexusEmail({
+
+          to:
+            user.email,
+
+          subject:
+            "Verify your Nexus Connect account",
+
+          title:
+            "Verify Your Nexus Connect Account",
+
+          greeting:
+            `Hello ${user.username},`,
+
+          message:
+            "Your Nexus Connect account has been created successfully. Please verify your email address to activate your account and access secure communication.",
+
+          buttonText:
+            "VERIFY EMAIL",
+
+          buttonUrl:
+            verificationUrl
+
+        });
+
+      } catch (emailError) {
+
+        await User.findByIdAndDelete(
+          user._id
+        );
+
+        console.error(
+          "VERIFICATION EMAIL FAILED:",
+          emailError.message
+        );
+
+        return res.status(500).json({
+
+          success: false,
+
+          message:
+            "Account could not be activated because the verification email could not be sent."
+
+        });
+
+      }
 
 
       return res.status(201).json({
@@ -969,7 +1568,7 @@ app.post(
         success: true,
 
         message:
-          "Account created. Email verification will be completed in the authentication layer.",
+          "Registration successful. Check your email to verify your account.",
 
         user: {
 
@@ -983,7 +1582,7 @@ app.post(
             user.email,
 
           emailVerified:
-            user.emailVerified
+            false
 
         }
 
@@ -1012,11 +1611,553 @@ app.post(
 
 
 // ============================================================
-// 16. CLOUDINARY UPLOAD FOUNDATION
+// 21. EMAIL VERIFICATION
+// ============================================================
+
+app.get(
+  "/api/auth/verify",
+  async (req, res) => {
+
+    try {
+
+      const token =
+        String(
+          req.query.token || ""
+        ).trim();
+
+
+      if (!token) {
+
+        return res.status(400).send(
+          "Invalid verification request."
+        );
+
+      }
+
+
+      const tokenHash =
+        hashToken(token);
+
+
+      const user =
+        await User.findOne({
+
+          verificationTokenHash:
+            tokenHash,
+
+          verificationExpiresAt: {
+            $gt: new Date()
+          }
+
+        }).select(
+          "+verificationTokenHash +verificationExpiresAt"
+        );
+
+
+      if (!user) {
+
+        return res.status(400).send(
+          "This verification link is invalid or has expired."
+        );
+
+      }
+
+
+      user.emailVerified =
+        true;
+
+      user.verificationTokenHash =
+        null;
+
+      user.verificationExpiresAt =
+        null;
+
+
+      await user.save();
+
+
+      return res.redirect(
+        `${FRONTEND_URL}/?verified=1`
+      );
+
+    } catch (error) {
+
+      console.error(
+        "EMAIL VERIFICATION ERROR:",
+        error
+      );
+
+      return res.status(500).send(
+        "Email verification failed."
+      );
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// 22. RESEND VERIFICATION
+// ============================================================
+
+app.post(
+  "/api/auth/resend-verification",
+  async (req, res) => {
+
+    try {
+
+      const email =
+        String(
+          req.body.email || ""
+        )
+          .trim()
+          .toLowerCase();
+
+
+      if (!email) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          message:
+            "Email is required."
+
+        });
+
+      }
+
+
+      const user =
+        await User.findOne({
+          email
+        }).select(
+          "+verificationTokenHash +verificationExpiresAt"
+        );
+
+
+      if (!user) {
+
+        return res.json({
+
+          success: true,
+
+          message:
+            "If the account exists, a verification email has been sent."
+
+        });
+
+      }
+
+
+      if (user.emailVerified) {
+
+        return res.json({
+
+          success: true,
+
+          message:
+            "This account is already verified."
+
+        });
+
+      }
+
+
+      const verificationToken =
+        generateVerificationToken();
+
+
+      user.verificationTokenHash =
+        hashToken(
+          verificationToken
+        );
+
+
+      user.verificationExpiresAt =
+        new Date(
+          Date.now() +
+          30 * 60 * 1000
+        );
+
+
+      await user.save();
+
+
+      const verificationUrl =
+        `${FRONTEND_URL}/?nexus_verify=${verificationToken}`;
+
+
+      await sendNexusEmail({
+
+        to:
+          user.email,
+
+        subject:
+          "Verify your Nexus Connect account",
+
+        title:
+          "Verify Your Nexus Connect Account",
+
+        greeting:
+          `Hello ${user.username},`,
+
+        message:
+          "Use the button below to verify your Nexus Connect account.",
+
+        buttonText:
+          "VERIFY EMAIL",
+
+        buttonUrl:
+          verificationUrl
+
+      });
+
+
+      return res.json({
+
+        success: true,
+
+        message:
+          "A new verification email has been sent."
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "RESEND VERIFICATION ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+
+        success: false,
+
+        message:
+          "Unable to send verification email."
+
+      });
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// 23. REAL LOGIN
+// ============================================================
+
+app.post(
+  "/api/auth/login",
+  async (req, res) => {
+
+    try {
+
+      const {
+        email,
+        password
+      } = req.body;
+
+
+      if (
+        !email ||
+        !password
+      ) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          message:
+            "Email and password are required."
+
+        });
+
+      }
+
+
+      const cleanEmail =
+        String(email)
+          .trim()
+          .toLowerCase();
+
+
+      const user =
+        await User.findOne({
+          email:
+            cleanEmail
+        })
+        .select(
+          "+passwordHash"
+        );
+
+
+      if (!user) {
+
+        return res.status(401).json({
+
+          success: false,
+
+          message:
+            "Invalid email or password."
+
+        });
+
+      }
+
+
+      const passwordCorrect =
+        await bcrypt.compare(
+
+          password,
+
+          user.passwordHash
+
+        );
+
+
+      if (!passwordCorrect) {
+
+        return res.status(401).json({
+
+          success: false,
+
+          message:
+            "Invalid email or password."
+
+        });
+
+      }
+
+
+      if (!user.emailVerified) {
+
+        return res.status(403).json({
+
+          success: false,
+
+          code:
+            "EMAIL_NOT_VERIFIED",
+
+          message:
+            "Please verify your email before logging in."
+
+        });
+
+      }
+
+
+      user.lastLoginAt =
+        new Date();
+
+
+      await user.save();
+
+
+      const token =
+        createAccessToken(
+          user
+        );
+
+
+      setAuthCookie(
+        res,
+        token
+      );
+
+
+      return res.json({
+
+        success: true,
+
+        message:
+          "Login successful.",
+
+        user: {
+
+          id:
+            user._id,
+
+          username:
+            user.username,
+
+          email:
+            user.email,
+
+          avatar:
+            user.avatar,
+
+          emailVerified:
+            user.emailVerified
+
+        }
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "LOGIN ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+
+        success: false,
+
+        message:
+          "Login failed."
+
+      });
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// 24. CURRENT SESSION
+// ============================================================
+
+app.get(
+  "/api/auth/me",
+  authenticateRequest,
+  async (req, res) => {
+
+    return res.json({
+
+      success: true,
+
+      authenticated:
+        true,
+
+      user: {
+
+        id:
+          req.user._id,
+
+        username:
+          req.user.username,
+
+        email:
+          req.user.email,
+
+        avatar:
+          req.user.avatar,
+
+        emailVerified:
+          req.user.emailVerified,
+
+        lastLoginAt:
+          req.user.lastLoginAt
+
+      }
+
+    });
+
+  }
+);
+
+
+// ============================================================
+// 25. LOGOUT
+// ============================================================
+
+app.post(
+  "/api/auth/logout",
+  (req, res) => {
+
+    clearAuthCookie(
+      res
+    );
+
+
+    return res.json({
+
+      success: true,
+
+      message:
+        "Logged out successfully."
+
+    });
+
+  }
+);
+
+
+// ============================================================
+// 26. PROTECTED USER DIRECTORY
+// ============================================================
+
+app.get(
+  "/api/users",
+  authenticateRequest,
+  async (req, res) => {
+
+    try {
+
+      const users =
+        await User.find({
+
+          emailVerified:
+            true,
+
+          _id: {
+            $ne:
+              req.user._id
+          }
+
+        })
+        .select(
+          "username email avatar emailVerified"
+        )
+        .sort({
+          username: 1
+        });
+
+
+      return res.json({
+
+        success: true,
+
+        users
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "USER DIRECTORY ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+
+        success: false,
+
+        message:
+          "Unable to load users."
+
+      });
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// 27. CLOUDINARY MEDIA UPLOAD
+// PROTECTED — ONLY AUTHENTICATED USERS
 // ============================================================
 
 app.post(
   "/api/upload",
+  authenticateRequest,
   upload.single("file"),
   async (req, res) => {
 
@@ -1051,9 +2192,17 @@ app.post(
                 (error, result) => {
 
                   if (error) {
-                    reject(error);
+
+                    reject(
+                      error
+                    );
+
                   } else {
-                    resolve(result);
+
+                    resolve(
+                      result
+                    );
+
                   }
 
                 }
@@ -1107,7 +2256,137 @@ app.post(
 
 
 // ============================================================
-// 17. SOCKET.IO REALTIME FOUNDATION
+// 28. SOCKET.IO AUTHENTICATION
+// ============================================================
+
+io.use(
+  async (socket, next) => {
+
+    try {
+
+      const cookieHeader =
+        socket.handshake.headers.cookie ||
+        "";
+
+
+      const cookies =
+        Object.fromEntries(
+
+          cookieHeader
+            .split(";")
+            .map(
+              part =>
+                part.trim()
+            )
+            .filter(Boolean)
+            .map(
+              part => {
+
+                const index =
+                  part.indexOf("=");
+
+                if (index === -1) {
+                  return [
+                    part,
+                    ""
+                  ];
+                }
+
+                return [
+
+                  part.slice(
+                    0,
+                    index
+                  ),
+
+                  decodeURIComponent(
+                    part.slice(
+                      index + 1
+                    )
+                  )
+
+                ];
+
+              }
+            )
+
+        );
+
+
+      const token =
+        cookies[COOKIE_NAME];
+
+
+      if (!token) {
+
+        return next(
+          new Error(
+            "Authentication required."
+          )
+        );
+
+      }
+
+
+      const decoded =
+        jwt.verify(
+
+          token,
+
+          process.env.JWT_SECRET
+
+        );
+
+
+      const user =
+        await User.findById(
+          decoded.sub
+        );
+
+
+      if (!user) {
+
+        return next(
+          new Error(
+            "User not found."
+          )
+        );
+
+      }
+
+
+      if (!user.emailVerified) {
+
+        return next(
+          new Error(
+            "Email verification required."
+          )
+        );
+
+      }
+
+
+      socket.user = user;
+
+
+      next();
+
+    } catch (error) {
+
+      next(
+        new Error(
+          "Invalid authentication session."
+        )
+      );
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// 29. SOCKET.IO REALTIME ENGINE
 // ============================================================
 
 io.on(
@@ -1115,8 +2394,13 @@ io.on(
   (socket) => {
 
     console.log(
-      "NEXUS SOCKET CONNECTED:",
+
+      "NEXUS SOCKET AUTHENTICATED:",
+
+      socket.user.username,
+
       socket.id
+
     );
 
 
@@ -1128,8 +2412,11 @@ io.on(
           typeof room !== "string" ||
           !room.trim()
         ) {
+
           return;
+
         }
+
 
         socket.join(
           room.trim()
@@ -1144,8 +2431,11 @@ io.on(
       () => {
 
         console.log(
+
           "NEXUS SOCKET DISCONNECTED:",
-          socket.id
+
+          socket.user.username
+
         );
 
       }
@@ -1156,7 +2446,7 @@ io.on(
 
 
 // ============================================================
-// 18. GLOBAL ERROR HANDLER
+// 30. GLOBAL ERROR HANDLER
 // ============================================================
 
 app.use(
@@ -1168,8 +2458,14 @@ app.use(
     );
 
 
-    if (res.headersSent) {
-      return next(error);
+    if (
+      res.headersSent
+    ) {
+
+      return next(
+        error
+      );
+
     }
 
 
@@ -1187,7 +2483,7 @@ app.use(
 
 
 // ============================================================
-// 19. STARTUP
+// 31. START SERVER
 // ============================================================
 
 async function startServer() {
@@ -1200,7 +2496,9 @@ async function startServer() {
 
 
     server.listen(
+
       PORT,
+
       () => {
 
         console.log(
@@ -1209,6 +2507,10 @@ async function startServer() {
 
         console.log(
           "NEXUS CONNECT ENGINE LIVE"
+        );
+
+        console.log(
+          "VERSION: 2.1.0"
         );
 
         console.log(
@@ -1228,11 +2530,15 @@ async function startServer() {
         );
 
         console.log(
-          "EMAIL ENGINE: READY"
+          "EMAIL: READY"
         );
 
         console.log(
-          "SOCKET.IO: READY"
+          "JWT AUTHENTICATION: READY"
+        );
+
+        console.log(
+          "SOCKET AUTHENTICATION: READY"
         );
 
         console.log(
@@ -1240,6 +2546,7 @@ async function startServer() {
         );
 
       }
+
     );
 
   } catch (error) {
