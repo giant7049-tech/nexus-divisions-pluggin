@@ -1,7 +1,7 @@
 /* =========================================================
    NEXUS CONNECT 2030
    Nexus Buildsolutions Limited
-   Application Stylesheet
+   Main Application Design System
    ========================================================= */
 
 
@@ -10,51 +10,65 @@
    ========================================================= */
 
 :root {
-    --nexus-navy: #071A33;
-    --nexus-navy-deep: #041222;
-    --nexus-navy-soft: #0D2748;
 
-    --nexus-gold: #C8A24A;
-    --nexus-gold-light: #E1C477;
+    /* Brand */
 
-    --nexus-white: #FFFFFF;
-    --nexus-surface: #F5F7FA;
-    --nexus-surface-alt: #EEF2F6;
+    --nexus-navy-950: #03101f;
+    --nexus-navy-900: #071a33;
+    --nexus-navy-850: #0b2341;
+    --nexus-navy-800: #102c4f;
+    --nexus-navy-700: #173b64;
+
+    --nexus-gold-500: #d8ad45;
+    --nexus-gold-400: #e7c568;
+    --nexus-gold-300: #f1d98b;
+
+    /* Neutral */
+
+    --nexus-white: #ffffff;
+    --nexus-surface: #f7f9fc;
+    --nexus-surface-2: #eef2f7;
+    --nexus-border: #dfe5ec;
 
     --nexus-text: #142033;
-    --nexus-text-soft: #637083;
-    --nexus-border: #DCE2EA;
+    --nexus-text-soft: #536174;
+    --nexus-text-muted: #7c8898;
 
-    --nexus-success: #2E8B68;
-    --nexus-danger: #B84A4A;
+    /* Status */
 
-    --nexus-radius-sm: 8px;
-    --nexus-radius-md: 14px;
-    --nexus-radius-lg: 22px;
+    --nexus-success: #23855b;
+    --nexus-success-soft: #e9f7f0;
+
+    --nexus-info: #2c6fa8;
+    --nexus-info-soft: #eaf3fb;
+
+    --nexus-warning: #b57a1b;
+    --nexus-warning-soft: #fff6df;
+
+    /* Effects */
 
     --nexus-shadow-sm:
         0 4px 14px rgba(7, 26, 51, 0.06);
 
     --nexus-shadow-md:
-        0 12px 32px rgba(7, 26, 51, 0.10);
+        0 12px 30px rgba(7, 26, 51, 0.09);
 
     --nexus-shadow-lg:
         0 24px 60px rgba(7, 26, 51, 0.14);
 
-    --nexus-container: 1180px;
+    --nexus-radius-sm: 8px;
+    --nexus-radius-md: 14px;
+    --nexus-radius-lg: 22px;
+    --nexus-radius-xl: 30px;
+
+    --nexus-container: 1240px;
 
     --nexus-transition:
         180ms ease;
 
-    --nexus-font:
-        Inter,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Roboto,
-        Helvetica,
-        Arial,
-        sans-serif;
+    --nexus-transition-slow:
+        320ms ease;
+
 }
 
 
@@ -68,24 +82,38 @@
     box-sizing: border-box;
 }
 
+
 html {
     scroll-behavior: smooth;
 }
 
+
 body {
     margin: 0;
-    min-height: 100vh;
 
-    font-family: var(--nexus-font);
-    font-size: 16px;
+    min-width: 320px;
+
+    background:
+        var(--nexus-surface);
+
+    color:
+        var(--nexus-text);
+
+    font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+
     line-height: 1.6;
-
-    color: var(--nexus-text);
-    background: var(--nexus-white);
 
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
 }
+
 
 button,
 input,
@@ -94,23 +122,60 @@ select {
     font: inherit;
 }
 
+
 button {
     cursor: pointer;
 }
+
 
 a {
     color: inherit;
     text-decoration: none;
 }
 
+
 img {
-    display: block;
     max-width: 100%;
+    display: block;
+}
+
+
+h1,
+h2,
+h3,
+p {
+    margin-top: 0;
+}
+
+
+h1,
+h2,
+h3 {
+    line-height: 1.15;
 }
 
 
 /* =========================================================
-   03. APPLICATION ROOT
+   03. ACCESSIBILITY
+   ========================================================= */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+    outline: 3px solid
+        rgba(216, 173, 69, 0.45);
+
+    outline-offset: 3px;
+}
+
+
+[hidden] {
+    display: none !important;
+}
+
+
+/* =========================================================
+   04. APPLICATION ROOT
    ========================================================= */
 
 .nexus-app {
@@ -118,9 +183,10 @@ img {
     overflow-x: hidden;
 }
 
+
 .nexus-container {
     width: min(
-        calc(100% - 48px),
+        calc(100% - 40px),
         var(--nexus-container)
     );
 
@@ -129,7 +195,7 @@ img {
 
 
 /* =========================================================
-   04. HEADER
+   05. HEADER
    ========================================================= */
 
 .nexus-header {
@@ -137,197 +203,293 @@ img {
     top: 0;
     z-index: 1000;
 
-    background: rgba(255, 255, 255, 0.96);
-    border-bottom: 1px solid var(--nexus-border);
+    background:
+        rgba(255, 255, 255, 0.94);
 
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    border-bottom:
+        1px solid var(--nexus-border);
+
+    backdrop-filter:
+        blur(18px);
+
+    -webkit-backdrop-filter:
+        blur(18px);
 }
+
 
 .nexus-header__inner {
     min-height: 78px;
-
-    width: min(
-        calc(100% - 48px),
-        var(--nexus-container)
-    );
-
-    margin-inline: auto;
 
     display: flex;
     align-items: center;
     justify-content: space-between;
 
-    gap: 28px;
+    gap: 30px;
 }
 
 
 /* =========================================================
-   05. BRAND
+   06. BRAND
    ========================================================= */
 
 .nexus-brand {
     display: inline-flex;
     align-items: center;
-    gap: 12px;
 
-    min-width: max-content;
+    gap: 11px;
+
+    flex-shrink: 0;
 }
 
+
 .nexus-brand__mark {
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
 
     display: grid;
     place-items: center;
 
-    border-radius: 11px;
+    border-radius: 12px;
 
-    color: var(--nexus-white);
     background:
         linear-gradient(
             145deg,
-            var(--nexus-navy),
-            var(--nexus-navy-soft)
+            var(--nexus-navy-900),
+            var(--nexus-navy-700)
         );
+
+    color:
+        var(--nexus-gold-400);
+
+    border:
+        1px solid
+        rgba(216, 173, 69, 0.45);
 
     font-size: 18px;
     font-weight: 800;
-    letter-spacing: -0.03em;
 
     box-shadow:
-        0 7px 18px rgba(7, 26, 51, 0.18);
+        0 6px 18px
+        rgba(7, 26, 51, 0.16);
 }
 
-.nexus-brand__text {
+
+.nexus-brand__identity {
     display: flex;
     flex-direction: column;
-    line-height: 1.15;
+
+    line-height: 1.1;
 }
+
 
 .nexus-brand__name {
-    color: var(--nexus-navy);
+    color:
+        var(--nexus-navy-900);
 
     font-size: 14px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
+
+    font-weight: 850;
+
+    letter-spacing: 0.09em;
 }
+
 
 .nexus-brand__company {
     margin-top: 4px;
 
-    color: var(--nexus-text-soft);
+    color:
+        var(--nexus-text-muted);
 
     font-size: 10px;
+
     font-weight: 600;
+
     letter-spacing: 0.03em;
 }
 
 
 /* =========================================================
-   06. NAVIGATION
+   07. NAVIGATION
    ========================================================= */
 
 .nexus-navigation {
     display: flex;
     align-items: center;
-    gap: 8px;
+
+    gap: 5px;
+
+    margin-left: auto;
 }
+
 
 .nexus-navigation__link {
     position: relative;
 
-    padding: 10px 13px;
+    padding:
+        10px
+        13px;
 
-    color: var(--nexus-text-soft);
+    color:
+        var(--nexus-text-soft);
 
-    font-size: 14px;
+    font-size: 13px;
+
     font-weight: 650;
 
-    border-radius: 8px;
+    border-radius: 9px;
 
     transition:
         color var(--nexus-transition),
         background var(--nexus-transition);
 }
 
+
 .nexus-navigation__link:hover {
-    color: var(--nexus-navy);
-    background: var(--nexus-surface);
+    color:
+        var(--nexus-navy-900);
+
+    background:
+        var(--nexus-surface);
 }
 
+
 .nexus-navigation__link.is-active {
-    color: var(--nexus-navy);
+    color:
+        var(--nexus-navy-900);
+
+    background:
+        #f0f4f8;
 }
+
 
 .nexus-navigation__link.is-active::after {
     content: "";
 
     position: absolute;
-    left: 13px;
-    right: 13px;
+
+    left: 50%;
     bottom: 3px;
 
+    width: 18px;
     height: 2px;
 
-    border-radius: 999px;
+    transform:
+        translateX(-50%);
 
-    background: var(--nexus-gold);
+    background:
+        var(--nexus-gold-500);
+
+    border-radius: 999px;
 }
 
 
 /* =========================================================
-   07. HEADER ACTIONS
+   08. HEADER ACTIONS
    ========================================================= */
 
 .nexus-header__actions {
     display: flex;
     align-items: center;
+
     gap: 10px;
 }
 
+
 .nexus-icon-button,
-.nexus-profile-button {
-    border: 1px solid var(--nexus-border);
-    background: var(--nexus-white);
+.nexus-profile-button,
+.nexus-mobile-menu-button {
+    border: 0;
 
-    transition:
-        border-color var(--nexus-transition),
-        box-shadow var(--nexus-transition),
-        transform var(--nexus-transition);
+    background:
+        transparent;
+
+    color:
+        var(--nexus-navy-900);
 }
 
-.nexus-icon-button:hover,
-.nexus-profile-button:hover {
-    border-color: var(--nexus-gold);
-    box-shadow: var(--nexus-shadow-sm);
-}
 
 .nexus-icon-button {
-    width: 42px;
-    height: 42px;
+    position: relative;
+
+    width: 40px;
+    height: 40px;
 
     display: grid;
     place-items: center;
 
-    border-radius: 10px;
+    border:
+        1px solid var(--nexus-border);
 
-    color: var(--nexus-navy);
+    border-radius: 11px;
 
+    transition:
+        background var(--nexus-transition),
+        border var(--nexus-transition);
+}
+
+
+.nexus-icon-button:hover {
+    background:
+        var(--nexus-surface);
+
+    border-color:
+        #cbd4df;
+}
+
+
+.nexus-icon-button__symbol {
     font-size: 22px;
 }
 
-.nexus-profile-button {
-    min-height: 42px;
 
-    display: flex;
-    align-items: center;
-    gap: 9px;
+.nexus-notification-count {
+    position: absolute;
 
-    padding: 5px 11px 5px 5px;
+    top: -4px;
+    right: -4px;
+
+    min-width: 17px;
+    height: 17px;
+
+    display: grid;
+    place-items: center;
+
+    padding-inline: 4px;
 
     border-radius: 999px;
+
+    background:
+        var(--nexus-gold-500);
+
+    color:
+        var(--nexus-navy-950);
+
+    font-size: 9px;
+    font-weight: 800;
 }
+
+
+.nexus-profile-button {
+    display: flex;
+    align-items: center;
+
+    gap: 8px;
+
+    padding:
+        4px
+        9px
+        4px
+        4px;
+
+    border:
+        1px solid var(--nexus-border);
+
+    border-radius: 999px;
+
+    background:
+        var(--nexus-white);
+}
+
 
 .nexus-profile-button__avatar {
     width: 31px;
@@ -338,62 +500,81 @@ img {
 
     border-radius: 50%;
 
-    color: var(--nexus-white);
-    background: var(--nexus-navy);
+    background:
+        var(--nexus-navy-900);
 
-    font-size: 12px;
+    color:
+        var(--nexus-gold-400);
+
+    font-size: 11px;
     font-weight: 800;
 }
 
-.nexus-profile-button__label {
-    color: var(--nexus-text);
 
-    font-size: 13px;
-    font-weight: 650;
+.nexus-profile-button__name {
+    color:
+        var(--nexus-text-soft);
+
+    font-size: 12px;
+    font-weight: 700;
+}
+
+
+.nexus-mobile-menu-button {
+    display: none;
+
+    width: 40px;
+    height: 40px;
+
+    border:
+        1px solid var(--nexus-border);
+
+    border-radius: 10px;
 }
 
 
 /* =========================================================
-   08. HERO
+   09. HERO
    ========================================================= */
 
 .nexus-hero {
     position: relative;
 
-    min-height: 650px;
+    overflow: hidden;
+
+    min-height: 670px;
 
     display: flex;
     align-items: center;
 
-    overflow: hidden;
-
-    color: var(--nexus-white);
-
     background:
         radial-gradient(
-            circle at 80% 25%,
-            rgba(200, 162, 74, 0.13),
+            circle at 75% 35%,
+            rgba(216, 173, 69, 0.12),
             transparent 28%
         ),
         radial-gradient(
-            circle at 10% 90%,
-            rgba(58, 113, 170, 0.15),
+            circle at 90% 80%,
+            rgba(35, 104, 160, 0.17),
             transparent 32%
         ),
         linear-gradient(
             135deg,
-            var(--nexus-navy-deep),
-            var(--nexus-navy)
+            var(--nexus-navy-950),
+            var(--nexus-navy-900) 55%,
+            var(--nexus-navy-800)
         );
+
+    color:
+        var(--nexus-white);
 }
+
 
 .nexus-hero::before {
     content: "";
 
     position: absolute;
     inset: 0;
-
-    opacity: 0.35;
 
     background-image:
         linear-gradient(
@@ -406,61 +587,77 @@ img {
             transparent 1px
         );
 
-    background-size: 46px 46px;
+    background-size:
+        42px 42px;
+
+    mask-image:
+        linear-gradient(
+            to bottom right,
+            black,
+            transparent 80%
+        );
 
     pointer-events: none;
 }
 
-.nexus-hero::after {
-    content: "";
 
-    position: absolute;
-
-    width: 460px;
-    height: 460px;
-
-    right: -180px;
-    bottom: -220px;
-
-    border: 1px solid rgba(200, 162, 74, 0.25);
-    border-radius: 50%;
-
-    box-shadow:
-        0 0 0 80px rgba(200, 162, 74, 0.025),
-        0 0 0 160px rgba(200, 162, 74, 0.018);
-
-    pointer-events: none;
-}
-
-.nexus-hero .nexus-container {
+.nexus-hero__grid {
     position: relative;
-    z-index: 2;
+    z-index: 1;
+
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1.08fr)
+        minmax(380px, 0.92fr);
+
+    align-items: center;
+
+    gap: 80px;
+
+    padding:
+        95px
+        0
+        100px;
 }
+
 
 .nexus-hero__content {
-    max-width: 850px;
-
-    padding-block: 90px;
+    max-width: 720px;
 }
+
 
 .nexus-status-badge {
     display: inline-flex;
     align-items: center;
-    gap: 9px;
 
-    padding: 7px 12px;
+    gap: 8px;
 
-    border: 1px solid rgba(225, 196, 119, 0.35);
+    padding:
+        7px
+        11px;
+
+    margin-bottom: 24px;
+
+    border:
+        1px solid
+        rgba(216, 173, 69, 0.32);
+
     border-radius: 999px;
 
-    color: var(--nexus-gold-light);
-    background: rgba(255, 255, 255, 0.045);
+    background:
+        rgba(216, 173, 69, 0.08);
 
-    font-size: 11px;
+    color:
+        var(--nexus-gold-300);
+
+    font-size: 10px;
+
     font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+
+    letter-spacing: 0.12em;
 }
+
 
 .nexus-status-badge__dot {
     width: 7px;
@@ -468,70 +665,88 @@ img {
 
     border-radius: 50%;
 
-    background: var(--nexus-gold);
+    background:
+        var(--nexus-gold-400);
 
     box-shadow:
-        0 0 0 4px rgba(200, 162, 74, 0.12);
+        0 0 0 4px
+        rgba(216, 173, 69, 0.12);
 }
+
 
 .nexus-hero__title {
-    max-width: 850px;
+    max-width: 700px;
 
-    margin: 24px 0 20px;
+    margin-bottom: 24px;
 
-    font-size: clamp(
-        42px,
-        6vw,
-        76px
-    );
-
-    line-height: 0.98;
+    font-size:
+        clamp(44px, 6vw, 76px);
 
     font-weight: 800;
-    letter-spacing: -0.055em;
+
+    letter-spacing:
+        -0.045em;
+
+    line-height: 1.01;
 }
+
 
 .nexus-hero__title span {
     display: block;
 
-    color: var(--nexus-gold-light);
+    color:
+        var(--nexus-gold-400);
 }
 
+
 .nexus-hero__description {
-    max-width: 670px;
+    max-width: 650px;
 
-    margin: 0 0 34px;
+    margin-bottom: 34px;
 
-    color: rgba(255, 255, 255, 0.72);
+    color:
+        rgba(255, 255, 255, 0.70);
 
     font-size: 17px;
+
     line-height: 1.75;
 }
 
 
 /* =========================================================
-   09. SEARCH
+   10. SEARCH
    ========================================================= */
 
 .nexus-search {
-    width: min(100%, 760px);
-
     display: flex;
     align-items: center;
 
+    max-width: 700px;
+
+    min-height: 66px;
+
     padding: 7px;
 
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    border-radius: 15px;
+    border:
+        1px solid
+        rgba(255, 255, 255, 0.13);
 
-    background: rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+
+    background:
+        rgba(255, 255, 255, 0.075);
 
     box-shadow:
-        0 18px 45px rgba(0, 0, 0, 0.18);
+        0 18px 45px
+        rgba(0, 0, 0, 0.16);
 
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter:
+        blur(14px);
+
+    -webkit-backdrop-filter:
+        blur(14px);
 }
+
 
 .nexus-search__icon {
     width: 48px;
@@ -539,664 +754,1588 @@ img {
     display: grid;
     place-items: center;
 
-    color: var(--nexus-gold-light);
+    color:
+        var(--nexus-gold-400);
 
     font-size: 25px;
 }
 
+
 .nexus-search__input {
-    flex: 1;
-
     min-width: 0;
-
-    padding: 14px 10px;
+    flex: 1;
 
     border: 0;
     outline: 0;
 
-    color: var(--nexus-white);
-    background: transparent;
+    background:
+        transparent;
 
-    font-size: 15px;
+    color:
+        var(--nexus-white);
+
+    font-size: 14px;
 }
+
 
 .nexus-search__input::placeholder {
-    color: rgba(255, 255, 255, 0.52);
+    color:
+        rgba(255, 255, 255, 0.47);
 }
 
 
-/* =========================================================
-   10. BUTTONS
-   ========================================================= */
-
 .nexus-button {
+    min-height: 46px;
+
     display: inline-flex;
     align-items: center;
     justify-content: center;
 
-    min-height: 46px;
+    gap: 8px;
 
-    padding: 0 20px;
+    padding:
+        0
+        18px;
 
-    border: 1px solid transparent;
-    border-radius: 10px;
+    border: 0;
 
-    font-size: 13px;
-    font-weight: 750;
+    border-radius: 11px;
+
+    font-size: 12px;
+
+    font-weight: 800;
 
     transition:
         transform var(--nexus-transition),
         box-shadow var(--nexus-transition),
-        background var(--nexus-transition),
-        border-color var(--nexus-transition);
+        background var(--nexus-transition);
 }
+
 
 .nexus-button:hover {
-    transform: translateY(-1px);
+    transform:
+        translateY(-1px);
 }
 
-.nexus-button:active {
-    transform: translateY(0);
-}
 
 .nexus-button--primary {
-    color: var(--nexus-navy);
-    background: var(--nexus-gold-light);
+    background:
+        var(--nexus-gold-500);
+
+    color:
+        var(--nexus-navy-950);
 
     box-shadow:
-        0 8px 22px rgba(0, 0, 0, 0.16);
+        0 7px 18px
+        rgba(216, 173, 69, 0.20);
 }
+
 
 .nexus-button--primary:hover {
-    background: var(--nexus-white);
+    background:
+        var(--nexus-gold-400);
 }
+
 
 .nexus-button--gold {
-    color: var(--nexus-navy);
-    background: var(--nexus-gold-light);
+    background:
+        var(--nexus-gold-500);
+
+    color:
+        var(--nexus-navy-950);
 }
 
-.nexus-button--gold:hover {
-    background: var(--nexus-white);
+
+.nexus-button--secondary {
+    background:
+        transparent;
+
+    color:
+        var(--nexus-navy-900);
+
+    border:
+        1px solid var(--nexus-border);
 }
 
 
-/* =========================================================
-   11. QUICK SEARCH
-   ========================================================= */
+.nexus-button--secondary:hover {
+    background:
+        var(--nexus-surface);
+}
+
 
 .nexus-quick-search {
     display: flex;
-    align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    align-items: center;
+
+    gap: 7px;
 
     margin-top: 14px;
+}
+
+
+.nexus-quick-search__label {
+    color:
+        rgba(255,255,255,0.45);
+
+    font-size: 10px;
+    font-weight: 700;
+}
+
+
+.nexus-quick-search button {
+    padding:
+        5px
+        9px;
+
+    border:
+        1px solid
+        rgba(255,255,255,0.10);
+
+    border-radius: 999px;
+
+    background:
+        rgba(255,255,255,0.035);
+
+    color:
+        rgba(255,255,255,0.60);
+
+    font-size: 10px;
+
+    transition:
+        background var(--nexus-transition),
+        color var(--nexus-transition);
+}
+
+
+.nexus-quick-search button:hover {
+    background:
+        rgba(216,173,69,0.10);
+
+    color:
+        var(--nexus-gold-300);
+}
+
+
+.nexus-search-status {
+    min-height: 24px;
+
+    margin-top: 12px;
+
+    color:
+        var(--nexus-gold-300);
 
     font-size: 12px;
 }
 
-.nexus-quick-search > span {
-    color: rgba(255, 255, 255, 0.42);
-    font-weight: 600;
+
+/* =========================================================
+   11. HERO NETWORK VISUAL
+   ========================================================= */
+
+.nexus-hero__visual {
+    position: relative;
+
+    min-height: 500px;
+
+    display: grid;
+    place-items: center;
 }
 
-.nexus-quick-search button {
-    padding: 6px 10px;
 
-    border: 1px solid rgba(255, 255, 255, 0.12);
+.nexus-network-orb {
+    position: relative;
+
+    width: 360px;
+    height: 360px;
+
+    display: grid;
+    place-items: center;
+
+    border:
+        1px solid
+        rgba(216,173,69,0.20);
+
+    border-radius: 50%;
+
+    background:
+        radial-gradient(
+            circle,
+            rgba(216,173,69,0.11),
+            rgba(255,255,255,0.015) 42%,
+            transparent 67%
+        );
+
+    box-shadow:
+        inset 0 0 70px
+        rgba(216,173,69,0.05),
+        0 0 80px
+        rgba(30,90,140,0.10);
+}
+
+
+.nexus-network-orb::before,
+.nexus-network-orb::after {
+    content: "";
+
+    position: absolute;
+
+    border:
+        1px solid
+        rgba(255,255,255,0.09);
+
+    border-radius: 50%;
+}
+
+
+.nexus-network-orb::before {
+    inset: 38px;
+}
+
+
+.nexus-network-orb::after {
+    inset: 82px;
+}
+
+
+.nexus-network-orb__core {
+    position: relative;
+    z-index: 5;
+
+    width: 125px;
+    height: 125px;
+
+    display: flex;
+    flex-direction: column;
+
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    background:
+        linear-gradient(
+            145deg,
+            #0f345d,
+            #071a33
+        );
+
+    border:
+        1px solid
+        rgba(216,173,69,0.45);
+
+    box-shadow:
+        0 0 45px
+        rgba(216,173,69,0.13);
+}
+
+
+.nexus-network-orb__core span {
+    color:
+        var(--nexus-gold-400);
+
+    font-size: 38px;
+
+    font-weight: 900;
+}
+
+
+.nexus-network-orb__core small {
+    margin-top: -2px;
+
+    color:
+        rgba(255,255,255,0.60);
+
+    font-size: 8px;
+
+    font-weight: 800;
+
+    letter-spacing: 0.14em;
+}
+
+
+.nexus-network-orb__node {
+    position: absolute;
+
+    z-index: 6;
+
+    padding:
+        7px
+        10px;
+
+    border:
+        1px solid
+        rgba(216,173,69,0.24);
+
     border-radius: 999px;
 
-    color: rgba(255, 255, 255, 0.7);
-    background: rgba(255, 255, 255, 0.045);
+    background:
+        rgba(7,26,51,0.84);
 
-    font-size: 11px;
-    font-weight: 600;
+    color:
+        rgba(255,255,255,0.75);
 
-    transition:
-        color var(--nexus-transition),
-        background var(--nexus-transition),
-        border-color var(--nexus-transition);
+    font-size: 8px;
+
+    font-weight: 800;
+
+    letter-spacing: 0.09em;
+
+    box-shadow:
+        0 8px 20px
+        rgba(0,0,0,0.18);
 }
 
-.nexus-quick-search button:hover {
-    color: var(--nexus-white);
-    border-color: rgba(225, 196, 119, 0.4);
-    background: rgba(200, 162, 74, 0.1);
+
+.nexus-network-orb__node--one {
+    top: 22px;
+    left: 50%;
+
+    transform:
+        translateX(-50%);
+}
+
+
+.nexus-network-orb__node--two {
+    right: 3px;
+    top: 50%;
+
+    transform:
+        translateY(-50%);
+}
+
+
+.nexus-network-orb__node--three {
+    bottom: 25px;
+    left: 50%;
+
+    transform:
+        translateX(-50%);
+}
+
+
+.nexus-network-orb__node--four {
+    left: 3px;
+    top: 50%;
+
+    transform:
+        translateY(-50%);
+}
+
+
+.nexus-hero__trust {
+    position: absolute;
+
+    bottom: 0;
+    right: 0;
+
+    max-width: 270px;
+
+    padding:
+        15px
+        18px;
+
+    border:
+        1px solid
+        rgba(255,255,255,0.10);
+
+    border-radius: 14px;
+
+    background:
+        rgba(255,255,255,0.06);
+
+    backdrop-filter:
+        blur(12px);
+}
+
+
+.nexus-hero__trust strong {
+    display: block;
+
+    margin-bottom: 4px;
+
+    color:
+        var(--nexus-white);
+
+    font-size: 12px;
+}
+
+
+.nexus-hero__trust span {
+    display: block;
+
+    color:
+        rgba(255,255,255,0.47);
+
+    font-size: 9px;
 }
 
 
 /* =========================================================
-   12. GENERAL SECTIONS
+   12. SECTIONS
    ========================================================= */
 
 .nexus-section {
-    padding: 100px 0;
+    padding:
+        105px
+        0;
 
-    background: var(--nexus-white);
+    background:
+        var(--nexus-white);
 }
+
 
 .nexus-section:nth-of-type(even) {
-    background: var(--nexus-surface);
+    background:
+        var(--nexus-surface);
 }
 
-.nexus-section__heading {
+
+.nexus-section-heading {
     display: flex;
-    align-items: flex-end;
     justify-content: space-between;
+    align-items: flex-end;
+
+    gap: 50px;
 
     margin-bottom: 42px;
 }
 
+
+.nexus-section-heading > div {
+    max-width: 700px;
+}
+
+
+.nexus-section-heading > p {
+    max-width: 400px;
+
+    margin-bottom: 2px;
+
+    color:
+        var(--nexus-text-soft);
+
+    font-size: 13px;
+
+    line-height: 1.7;
+}
+
+
 .nexus-eyebrow {
-    display: inline-block;
+    display: block;
 
     margin-bottom: 10px;
 
-    color: var(--nexus-gold);
+    color:
+        var(--nexus-gold-500);
 
-    font-size: 11px;
-    font-weight: 800;
+    font-size: 10px;
+
+    font-weight: 850;
+
     letter-spacing: 0.13em;
-    text-transform: uppercase;
 }
 
-.nexus-section h2,
+
+.nexus-section-heading h2,
 .nexus-request-panel h2,
-.nexus-certification h2 {
-    margin: 0;
+.nexus-trust-promise h2,
+.nexus-future-panel h2 {
+    margin-bottom: 0;
 
-    color: var(--nexus-navy);
+    color:
+        var(--nexus-navy-900);
 
-    font-size: clamp(
-        28px,
-        4vw,
-        43px
-    );
+    font-size:
+        clamp(30px, 4vw, 48px);
 
-    line-height: 1.08;
-    letter-spacing: -0.04em;
-}
-
-.nexus-section__heading h2 {
-    max-width: 650px;
+    letter-spacing:
+        -0.035em;
 }
 
 
 /* =========================================================
-   13. TRUSTED NETWORK GRID
+   13. CAPABILITY GRID
    ========================================================= */
 
-.nexus-network-grid {
+.nexus-capability-grid {
     display: grid;
 
     grid-template-columns:
-        repeat(4, minmax(0, 1fr));
+        repeat(4, 1fr);
 
-    gap: 18px;
+    gap: 17px;
 }
 
-.nexus-network-card {
-    min-height: 250px;
 
-    padding: 25px;
+.nexus-capability-card {
+    min-height: 285px;
 
-    border: 1px solid var(--nexus-border);
-    border-radius: var(--nexus-radius-lg);
+    padding: 27px;
 
-    background: var(--nexus-white);
+    border:
+        1px solid var(--nexus-border);
 
-    box-shadow: var(--nexus-shadow-sm);
+    border-radius:
+        var(--nexus-radius-md);
+
+    background:
+        var(--nexus-white);
+
+    box-shadow:
+        var(--nexus-shadow-sm);
 
     transition:
-        transform var(--nexus-transition),
-        box-shadow var(--nexus-transition),
-        border-color var(--nexus-transition);
+        transform var(--nexus-transition-slow),
+        box-shadow var(--nexus-transition-slow),
+        border var(--nexus-transition-slow);
 }
 
-.nexus-network-card:hover {
-    transform: translateY(-5px);
 
-    border-color: rgba(200, 162, 74, 0.5);
+.nexus-capability-card:hover {
+    transform:
+        translateY(-5px);
 
-    box-shadow: var(--nexus-shadow-md);
+    border-color:
+        rgba(216,173,69,0.40);
+
+    box-shadow:
+        var(--nexus-shadow-md);
 }
 
-.nexus-network-card__icon {
+
+.nexus-capability-card__icon {
+    width: 45px;
+    height: 45px;
+
+    display: grid;
+    place-items: center;
+
+    margin-bottom: 30px;
+
+    border-radius: 12px;
+
+    background:
+        var(--nexus-navy-900);
+
+    color:
+        var(--nexus-gold-400);
+
+    font-size: 19px;
+    font-weight: 800;
+}
+
+
+.nexus-capability-card__label {
+    display: block;
+
+    margin-bottom: 8px;
+
+    color:
+        var(--nexus-text-muted);
+
+    font-size: 8px;
+
+    font-weight: 850;
+
+    letter-spacing: 0.12em;
+}
+
+
+.nexus-capability-card h3 {
+    margin-bottom: 11px;
+
+    color:
+        var(--nexus-navy-900);
+
+    font-size: 20px;
+}
+
+
+.nexus-capability-card p {
+    min-height: 67px;
+
+    margin-bottom: 18px;
+
+    color:
+        var(--nexus-text-soft);
+
+    font-size: 12px;
+
+    line-height: 1.7;
+}
+
+
+.nexus-text-button {
+    padding: 0;
+
+    border: 0;
+
+    background: transparent;
+
+    color:
+        var(--nexus-navy-900);
+
+    font-size: 11px;
+
+    font-weight: 800;
+}
+
+
+.nexus-text-button:hover {
+    color:
+        var(--nexus-gold-500);
+}
+
+
+/* =========================================================
+   14. IDENTITY / VERIFICATION
+   ========================================================= */
+
+.nexus-section--trust {
+    background:
+        #f3f6fa;
+}
+
+
+.nexus-identity-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 17px;
+}
+
+
+.nexus-identity-card {
+    padding: 25px;
+
+    border:
+        1px solid var(--nexus-border);
+
+    border-radius:
+        var(--nexus-radius-md);
+
+    background:
+        var(--nexus-white);
+
+    box-shadow:
+        var(--nexus-shadow-sm);
+}
+
+
+.nexus-identity-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 12px;
+
+    margin-bottom: 24px;
+}
+
+
+.nexus-identity-card__avatar {
     width: 48px;
     height: 48px;
 
     display: grid;
     place-items: center;
 
-    margin-bottom: 26px;
+    border-radius: 14px;
 
-    border-radius: 12px;
+    background:
+        var(--nexus-navy-900);
 
-    color: var(--nexus-gold);
-    background: rgba(200, 162, 74, 0.09);
+    color:
+        var(--nexus-gold-400);
 
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 850;
+}
+
+
+.nexus-badge {
+    display: inline-flex;
+
+    padding:
+        5px
+        7px;
+
+    border-radius: 999px;
+
+    font-size: 7px;
+
+    font-weight: 850;
+
     letter-spacing: 0.05em;
 }
 
-.nexus-network-card__badge {
-    display: inline-block;
 
+.nexus-badge--staff {
+    background:
+        #e9edf3;
+
+    color:
+        var(--nexus-navy-900);
+}
+
+
+.nexus-badge--certified {
+    background:
+        var(--nexus-success-soft);
+
+    color:
+        var(--nexus-success);
+}
+
+
+.nexus-badge--business {
+    background:
+        var(--nexus-warning-soft);
+
+    color:
+        var(--nexus-warning);
+}
+
+
+.nexus-badge--verified {
+    background:
+        var(--nexus-info-soft);
+
+    color:
+        var(--nexus-info);
+}
+
+
+.nexus-identity-card h3 {
     margin-bottom: 8px;
 
-    color: var(--nexus-gold);
+    color:
+        var(--nexus-navy-900);
 
-    font-size: 9px;
-    font-weight: 850;
-    letter-spacing: 0.11em;
+    font-size: 18px;
 }
 
-.nexus-network-card h3 {
-    margin: 0 0 9px;
 
-    color: var(--nexus-navy);
+.nexus-identity-card p {
+    margin-bottom: 0;
 
-    font-size: 19px;
-    line-height: 1.2;
-}
+    color:
+        var(--nexus-text-soft);
 
-.nexus-network-card p {
-    margin: 0;
+    font-size: 12px;
 
-    color: var(--nexus-text-soft);
-
-    font-size: 13px;
     line-height: 1.7;
 }
 
 
 /* =========================================================
-   14. REQUEST PANEL
+   15. REQUEST PANEL
    ========================================================= */
 
-.nexus-section--request {
+.nexus-request-panel {
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(300px, 0.7fr);
+
+    gap: 70px;
+
+    padding:
+        60px;
+
+    border-radius:
+        var(--nexus-radius-xl);
+
     background:
         linear-gradient(
             135deg,
-            var(--nexus-navy),
-            var(--nexus-navy-deep)
+            var(--nexus-navy-950),
+            var(--nexus-navy-800)
         );
-}
 
-.nexus-request-panel {
-    position: relative;
-
-    min-height: 360px;
-
-    display: grid;
-    grid-template-columns: 1.2fr 0.8fr;
+    color:
+        var(--nexus-white);
 
     overflow: hidden;
 
-    border-radius: 26px;
+    box-shadow:
+        var(--nexus-shadow-lg);
+}
 
-    color: var(--nexus-white);
+
+.nexus-request-panel__content h2 {
+    color:
+        var(--nexus-white);
+
+    margin-bottom: 18px;
+}
+
+
+.nexus-request-panel__content > p {
+    max-width: 580px;
+
+    margin-bottom: 25px;
+
+    color:
+        rgba(255,255,255,0.65);
+
+    font-size: 14px;
+
+    line-height: 1.8;
+}
+
+
+.nexus-request-example {
+    max-width: 550px;
+
+    margin-bottom: 28px;
+
+    padding:
+        15px
+        18px;
+
+    border-left:
+        2px solid
+        var(--nexus-gold-500);
 
     background:
-        radial-gradient(
-            circle at 90% 50%,
-            rgba(200, 162, 74, 0.15),
-            transparent 35%
-        ),
-        rgba(255, 255, 255, 0.035);
-
-    border: 1px solid rgba(255, 255, 255, 0.08);
-
-    box-shadow: var(--nexus-shadow-lg);
-}
-
-.nexus-request-panel__content {
-    padding: 60px;
-}
-
-.nexus-request-panel h2 {
-    color: var(--nexus-white);
-}
-
-.nexus-request-panel p {
-    max-width: 570px;
-
-    margin: 18px 0 28px;
-
-    color: rgba(255, 255, 255, 0.66);
-
-    line-height: 1.75;
-}
-
-.nexus-request-panel__visual {
-    position: relative;
-
-    min-height: 300px;
-
-    display: grid;
-    place-items: center;
-}
-
-.nexus-request-orbit {
-    position: relative;
-
-    width: 260px;
-    height: 260px;
-
-    border: 1px solid rgba(225, 196, 119, 0.22);
-    border-radius: 50%;
-}
-
-.nexus-request-orbit::before,
-.nexus-request-orbit::after {
-    content: "";
-
-    position: absolute;
-
-    inset: 35px;
-
-    border: 1px solid rgba(225, 196, 119, 0.15);
-    border-radius: 50%;
-}
-
-.nexus-request-orbit::after {
-    inset: 75px;
-}
-
-.nexus-request-orbit span {
-    position: absolute;
-
-    display: grid;
-    place-items: center;
-
-    width: 74px;
-    height: 74px;
-
-    border: 1px solid rgba(225, 196, 119, 0.3);
-    border-radius: 50%;
-
-    color: var(--nexus-gold-light);
-    background: rgba(7, 26, 51, 0.7);
-
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-}
-
-.nexus-request-orbit span:nth-child(1) {
-    top: -20px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.nexus-request-orbit span:nth-child(2) {
-    right: -22px;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.nexus-request-orbit span:nth-child(3) {
-    left: -22px;
-    top: 50%;
-    transform: translateY(-50%);
+        rgba(255,255,255,0.055);
 }
 
 
-/* =========================================================
-   15. CERTIFICATION
-   ========================================================= */
-
-.nexus-certification {
-    display: flex;
-    align-items: center;
-    gap: 30px;
-
-    padding: 38px;
-
-    border: 1px solid var(--nexus-border);
-    border-radius: var(--nexus-radius-lg);
-
-    background: var(--nexus-white);
-
-    box-shadow: var(--nexus-shadow-sm);
-}
-
-.nexus-certification__icon {
-    flex: 0 0 auto;
-
-    width: 70px;
-    height: 70px;
-
-    display: grid;
-    place-items: center;
-
-    border-radius: 18px;
-
-    color: var(--nexus-gold);
-
-    background:
-        rgba(200, 162, 74, 0.1);
-
-    border: 1px solid rgba(200, 162, 74, 0.22);
-
-    font-size: 28px;
-    font-weight: 700;
-}
-
-.nexus-certification p {
-    max-width: 760px;
-
-    margin: 16px 0 0;
-
-    color: var(--nexus-text-soft);
-
-    line-height: 1.75;
-}
-
-
-/* =========================================================
-   16. FOOTER
-   ========================================================= */
-
-.nexus-footer {
-    color: rgba(255, 255, 255, 0.65);
-
-    background: var(--nexus-navy-deep);
-
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.nexus-footer__inner {
-    min-height: 150px;
-
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-
-    gap: 30px;
-}
-
-.nexus-footer strong {
+.nexus-request-example span {
     display: block;
 
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 
-    color: var(--nexus-white);
+    color:
+        var(--nexus-gold-300);
 
-    font-size: 13px;
+    font-size: 8px;
+
+    font-weight: 800;
+
     letter-spacing: 0.1em;
 }
 
-.nexus-footer p {
-    margin: 0;
 
-    color: rgba(255, 255, 255, 0.48);
+.nexus-request-example strong {
+    color:
+        rgba(255,255,255,0.76);
+
+    font-size: 12px;
+
+    font-weight: 600;
+}
+
+
+.nexus-request-flow {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    gap: 12px;
+}
+
+
+.nexus-flow-step {
+    display: flex;
+    flex-direction: column;
+
+    align-items: center;
+
+    gap: 7px;
+
+    text-align: center;
+}
+
+
+.nexus-flow-step span {
+    width: 52px;
+    height: 52px;
+
+    display: grid;
+    place-items: center;
+
+    border:
+        1px solid
+        rgba(216,173,69,0.32);
+
+    border-radius: 50%;
+
+    color:
+        var(--nexus-gold-400);
+
+    font-size: 11px;
+
+    font-weight: 850;
+}
+
+
+.nexus-flow-step strong {
+    color:
+        rgba(255,255,255,0.62);
+
+    font-size: 9px;
+
+    letter-spacing: 0.08em;
+}
+
+
+.nexus-flow-line {
+    width: 25px;
+    height: 1px;
+
+    background:
+        rgba(255,255,255,0.16);
+}
+
+
+/* =========================================================
+   16. TRUST PROMISE
+   ========================================================= */
+
+.nexus-section--trust-promise {
+    background:
+        var(--nexus-surface);
+}
+
+
+.nexus-trust-promise {
+    display: grid;
+
+    grid-template-columns:
+        auto
+        1fr
+        auto;
+
+    align-items: center;
+
+    gap: 28px;
+
+    padding:
+        35px
+        40px;
+
+    border:
+        1px solid var(--nexus-border);
+
+    border-radius:
+        var(--nexus-radius-lg);
+
+    background:
+        var(--nexus-white);
+
+    box-shadow:
+        var(--nexus-shadow-sm);
+}
+
+
+.nexus-trust-promise__icon {
+    width: 58px;
+    height: 58px;
+
+    display: grid;
+    place-items: center;
+
+    border-radius: 17px;
+
+    background:
+        var(--nexus-success-soft);
+
+    color:
+        var(--nexus-success);
+
+    font-size: 22px;
+
+    font-weight: 900;
+}
+
+
+.nexus-trust-promise__content h2 {
+    margin-bottom: 8px;
+
+    font-size: 25px;
+}
+
+
+.nexus-trust-promise__content p {
+    max-width: 700px;
+
+    margin-bottom: 0;
+
+    color:
+        var(--nexus-text-soft);
 
     font-size: 12px;
 }
 
-.nexus-footer span {
-    color: rgba(255, 255, 255, 0.4);
+
+/* =========================================================
+   17. FUTURE PANEL
+   ========================================================= */
+
+.nexus-section--future {
+    background:
+        var(--nexus-white);
+}
+
+
+.nexus-future-panel {
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        1fr;
+
+    gap: 60px;
+
+    align-items: center;
+
+    padding:
+        60px;
+
+    border-radius:
+        var(--nexus-radius-xl);
+
+    background:
+        linear-gradient(
+            145deg,
+            #f4f7fb,
+            #ffffff
+        );
+
+    border:
+        1px solid var(--nexus-border);
+}
+
+
+.nexus-future-panel h2 {
+    margin-bottom: 20px;
+}
+
+
+.nexus-future-panel p {
+    max-width: 600px;
+
+    margin-bottom: 0;
+
+    color:
+        var(--nexus-text-soft);
+
+    font-size: 14px;
+
+    line-height: 1.8;
+}
+
+
+.nexus-future-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, 1fr);
+
+    gap: 10px;
+}
+
+
+.nexus-future-grid span {
+    padding:
+        16px
+        17px;
+
+    border:
+        1px solid var(--nexus-border);
+
+    border-radius: 12px;
+
+    background:
+        var(--nexus-white);
+
+    color:
+        var(--nexus-navy-900);
 
     font-size: 11px;
+
+    font-weight: 750;
+
+    box-shadow:
+        var(--nexus-shadow-sm);
 }
 
 
 /* =========================================================
-   17. FOCUS STATES
+   18. FOOTER
    ========================================================= */
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible {
-    outline: 3px solid rgba(200, 162, 74, 0.45);
-    outline-offset: 3px;
+.nexus-footer {
+    padding:
+        50px
+        0;
+
+    background:
+        var(--nexus-navy-950);
+
+    color:
+        var(--nexus-white);
+}
+
+
+.nexus-footer__inner {
+    display: grid;
+
+    grid-template-columns:
+        1.5fr
+        1fr
+        auto;
+
+    gap: 50px;
+
+    align-items: end;
+}
+
+
+.nexus-footer__brand strong {
+    display: block;
+
+    margin-bottom: 4px;
+
+    color:
+        var(--nexus-gold-400);
+
+    font-size: 14px;
+
+    letter-spacing: 0.08em;
+}
+
+
+.nexus-footer__brand > span {
+    display: block;
+
+    margin-bottom: 10px;
+
+    color:
+        rgba(255,255,255,0.45);
+
+    font-size: 9px;
+}
+
+
+.nexus-footer__brand p {
+    max-width: 360px;
+
+    margin-bottom: 0;
+
+    color:
+        rgba(255,255,255,0.40);
+
+    font-size: 10px;
+}
+
+
+.nexus-footer__links {
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 15px;
+}
+
+
+.nexus-footer__links a {
+    color:
+        rgba(255,255,255,0.52);
+
+    font-size: 10px;
+
+    transition:
+        color var(--nexus-transition);
+}
+
+
+.nexus-footer__links a:hover {
+    color:
+        var(--nexus-gold-400);
+}
+
+
+.nexus-footer__legal {
+    display: flex;
+    flex-direction: column;
+
+    gap: 4px;
+
+    text-align: right;
+
+    color:
+        rgba(255,255,255,0.32);
+
+    font-size: 9px;
 }
 
 
 /* =========================================================
-   18. RESPONSIVE — TABLET
+   19. MOBILE NAVIGATION
    ========================================================= */
 
-@media (max-width: 980px) {
+.nexus-mobile-navigation {
+    padding:
+        12px
+        20px
+        18px;
+
+    border-top:
+        1px solid var(--nexus-border);
+
+    background:
+        var(--nexus-white);
+}
+
+
+.nexus-mobile-navigation a {
+    display: block;
+
+    padding:
+        12px
+        8px;
+
+    color:
+        var(--nexus-text-soft);
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    border-bottom:
+        1px solid var(--nexus-border);
+}
+
+
+.nexus-mobile-navigation a:last-child {
+    border-bottom: 0;
+}
+
+
+/* =========================================================
+   20. RESPONSIVE — TABLET
+   ========================================================= */
+
+@media (max-width: 1050px) {
 
     .nexus-navigation {
         display: none;
     }
 
-    .nexus-network-grid {
-        grid-template-columns:
-            repeat(2, minmax(0, 1fr));
+
+    .nexus-mobile-menu-button {
+        display: block;
     }
+
+
+    .nexus-hero__grid {
+        grid-template-columns:
+            1fr;
+
+        gap: 30px;
+    }
+
+
+    .nexus-hero__content {
+        max-width: 800px;
+    }
+
+
+    .nexus-hero__visual {
+        min-height: 380px;
+    }
+
+
+    .nexus-network-orb {
+        width: 300px;
+        height: 300px;
+    }
+
+
+    .nexus-capability-grid,
+    .nexus-identity-grid {
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+
 
     .nexus-request-panel {
-        grid-template-columns: 1fr;
+        grid-template-columns:
+            1fr;
     }
 
-    .nexus-request-panel__visual {
-        display: none;
+
+    .nexus-future-panel {
+        grid-template-columns:
+            1fr;
+    }
+
+
+    .nexus-footer__inner {
+        grid-template-columns:
+            1fr 1fr;
+    }
+
+
+    .nexus-footer__legal {
+        text-align: left;
     }
 
 }
 
 
 /* =========================================================
-   19. RESPONSIVE — MOBILE
+   21. RESPONSIVE — MOBILE
    ========================================================= */
 
-@media (max-width: 640px) {
+@media (max-width: 680px) {
 
-    .nexus-container,
-    .nexus-header__inner {
-        width: min(
-            calc(100% - 30px),
-            var(--nexus-container)
-        );
+    .nexus-container {
+        width:
+            min(
+                calc(100% - 28px),
+                var(--nexus-container)
+            );
     }
+
 
     .nexus-header__inner {
         min-height: 68px;
+
+        gap: 10px;
     }
+
 
     .nexus-brand__company {
         display: none;
     }
 
-    .nexus-profile-button__label {
+
+    .nexus-profile-button__name {
         display: none;
     }
 
+
     .nexus-hero {
-        min-height: 600px;
-    }
-
-    .nexus-hero__content {
-        padding-block: 70px;
-    }
-
-    .nexus-hero__title {
-        font-size: 43px;
-    }
-
-    .nexus-hero__description {
-        font-size: 15px;
-    }
-
-    .nexus-search {
-        align-items: stretch;
-        flex-wrap: wrap;
-    }
-
-    .nexus-search__icon {
-        width: 42px;
-    }
-
-    .nexus-search__input {
-        width: calc(100% - 42px);
-    }
-
-    .nexus-search .nexus-button {
-        width: 100%;
-    }
-
-    .nexus-quick-search {
-        align-items: flex-start;
-    }
-
-    .nexus-section {
-        padding: 70px 0;
-    }
-
-    .nexus-network-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .nexus-network-card {
         min-height: auto;
     }
 
-    .nexus-request-panel__content {
-        padding: 35px 25px;
+
+    .nexus-hero__grid {
+        padding:
+            65px
+            0
+            70px;
     }
 
-    .nexus-certification {
-        align-items: flex-start;
+
+    .nexus-hero__title {
+        font-size:
+            clamp(40px, 12vw, 58px);
+    }
+
+
+    .nexus-hero__description {
+        font-size: 14px;
+    }
+
+
+    .nexus-search {
+        min-height: auto;
+
         flex-direction: column;
 
-        padding: 28px;
+        align-items: stretch;
+
+        padding: 9px;
     }
+
+
+    .nexus-search__icon {
+        display: none;
+    }
+
+
+    .nexus-search__input {
+        min-height: 47px;
+
+        padding:
+            0
+            9px;
+    }
+
+
+    .nexus-button--primary {
+        width: 100%;
+    }
+
+
+    .nexus-hero__visual {
+        min-height: 330px;
+    }
+
+
+    .nexus-network-orb {
+        width: 270px;
+        height: 270px;
+    }
+
+
+    .nexus-network-orb__core {
+        width: 100px;
+        height: 100px;
+    }
+
+
+    .nexus-network-orb__node {
+        font-size: 7px;
+    }
+
+
+    .nexus-hero__trust {
+        right: 50%;
+
+        transform:
+            translateX(50%);
+
+        width:
+            calc(100% - 20px);
+
+        bottom: -5px;
+    }
+
+
+    .nexus-section {
+        padding:
+            70px
+            0;
+    }
+
+
+    .nexus-section-heading {
+        display: block;
+    }
+
+
+    .nexus-section-heading > p {
+        margin-top: 18px;
+    }
+
+
+    .nexus-capability-grid,
+    .nexus-identity-grid {
+        grid-template-columns:
+            1fr;
+    }
+
+
+    .nexus-capability-card {
+        min-height: auto;
+    }
+
+
+    .nexus-capability-card p {
+        min-height: auto;
+    }
+
+
+    .nexus-request-panel {
+        padding:
+            30px
+            24px;
+
+        gap: 40px;
+    }
+
+
+    .nexus-request-flow {
+        flex-wrap: wrap;
+    }
+
+
+    .nexus-flow-line {
+        display: none;
+    }
+
+
+    .nexus-trust-promise {
+        grid-template-columns:
+            1fr;
+
+        padding:
+            28px
+            24px;
+    }
+
+
+    .nexus-future-panel {
+        padding:
+            30px
+            24px;
+    }
+
+
+    .nexus-future-grid {
+        grid-template-columns:
+            1fr;
+    }
+
+
+    .nexus-footer {
+        padding:
+            40px
+            0;
+    }
+
 
     .nexus-footer__inner {
-        min-height: 130px;
+        grid-template-columns:
+            1fr;
+    }
 
-        align-items: flex-start;
-        flex-direction: column;
-        justify-content: center;
 
-        gap: 14px;
+    .nexus-footer__legal {
+        text-align: left;
     }
 
 }
 
 
 /* =========================================================
-   20. REDUCED MOTION
+   22. REDUCED MOTION
    ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
 
-    html {
-        scroll-behavior: auto;
-    }
-
     *,
     *::before,
     *::after {
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
+
+        scroll-behavior: auto !important;
+
+        transition-duration:
+            0.01ms !important;
+
+        animation-duration:
+            0.01ms !important;
+
+        animation-iteration-count:
+            1 !important;
     }
 
 }
+
+
+/* =========================================================
+   END — NEXUS CONNECT 2030 DESIGN SYSTEM
+   ========================================================= */
