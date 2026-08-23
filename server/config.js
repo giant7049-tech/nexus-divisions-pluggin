@@ -134,7 +134,7 @@ const BRAND = Object.freeze({
         APP_NAME,
 
     logo:
-        '/assets/logo/nexus-buildsolutions-logo.png',
+        '/assets/logo/Screenshot%202025-09-29%20122409.png',
 
     applicationIcon:
         '/assets/icons/icon.svg',
