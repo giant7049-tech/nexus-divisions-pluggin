@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 
     <!-- =========================================================
          NEXUS CONNECT 2030
-         Frontend Application Entry Point
          Nexus Buildsolutions Limited
          ========================================================= -->
 
@@ -17,7 +17,7 @@
 
     <meta
         name="description"
-        content="Nexus Connect — connecting people, finding expertise and delivering solutions through a trusted professional network."
+        content="Nexus Connect by Nexus Buildsolutions Limited — a trusted professional network for discovering people, expertise, services, businesses and practical solutions."
     >
 
     <meta
@@ -26,8 +26,8 @@
     >
 
     <meta
-        name="theme-color"
-        content="#071A33"
+        name="publisher"
+        content="Nexus Buildsolutions Limited"
     >
 
     <meta
@@ -35,30 +35,76 @@
         content="Nexus Connect"
     >
 
+    <meta
+        name="theme-color"
+        content="#071A33"
+    >
+
+    <meta
+        name="color-scheme"
+        content="light"
+    >
+
+    <!-- =========================================================
+         SOCIAL / SHARING METADATA
+         ========================================================= -->
+
+    <meta
+        property="og:title"
+        content="Nexus Connect | Nexus Buildsolutions Limited"
+    >
+
+    <meta
+        property="og:description"
+        content="Find the right person. Find the right solution."
+    >
+
+    <meta
+        property="og:type"
+        content="website"
+    >
+
+    <meta
+        property="og:site_name"
+        content="Nexus Connect"
+    >
+
+    <!-- =========================================================
+         TITLE
+         ========================================================= -->
+
     <title>
         Nexus Connect | Nexus Buildsolutions Limited
     </title>
 
-    <!--
-        =========================================================
-        STYLESHEET
-        =========================================================
+    <!-- =========================================================
+         OFFICIAL BRAND ASSET
+         
+         IMPORTANT:
+         Keep this path consistent with:
+         public/assets/logo/
+         
+         Recommended production filename:
+         nexus-buildsolutions-logo.png
+         
+         Current uploaded filename:
+         Screenshot 2025-09-29 122409.png
+         ========================================================= -->
 
-        Main visual system:
+    <link
+        rel="icon"
+        type="image/png"
+        href="/assets/logo/Screenshot%202025-09-29%20122409.png"
+    >
 
-        /public/css/app.css
+    <link
+        rel="apple-touch-icon"
+        href="/assets/logo/Screenshot%202025-09-29%20122409.png"
+    >
 
-        The stylesheet will later contain:
-        - responsive layout
-        - design tokens
-        - dashboard components
-        - cards
-        - search interface
-        - certification badges
-        - navigation
-        - responsive mobile UI
-        =========================================================
-    -->
+    <!-- =========================================================
+         STYLESHEET
+         ========================================================= -->
 
     <link
         rel="stylesheet"
@@ -69,6 +115,19 @@
 
 
 <body>
+
+    <!-- =========================================================
+         SKIP LINK
+         Accessibility / keyboard navigation
+         ========================================================= -->
+
+    <a
+        class="nexus-skip-link"
+        href="#nexus-main"
+    >
+        Skip to main content
+    </a>
+
 
     <!-- =========================================================
          APPLICATION ROOT
@@ -89,11 +148,13 @@
             class="nexus-header"
         >
 
-            <div class="nexus-container nexus-header__inner">
+            <div
+                class="nexus-container nexus-header__inner"
+            >
 
 
                 <!-- =================================================
-                     BRAND
+                     OFFICIAL NEXUS BRAND
                      ================================================= -->
 
                 <a
@@ -104,20 +165,35 @@
                 >
 
                     <div
-                        class="nexus-brand__mark"
-                        aria-hidden="true"
+                        class="nexus-brand__logo-wrap"
                     >
-                        N
+
+                        <img
+                            src="/assets/logo/Screenshot%202025-09-29%20122409.png"
+                            alt="Nexus Buildsolutions Limited official logo"
+                            class="nexus-brand__logo"
+                            width="180"
+                            height="92"
+                            loading="eager"
+                            decoding="async"
+                        >
+
                     </div>
 
 
-                    <div class="nexus-brand__identity">
+                    <div
+                        class="nexus-brand__identity"
+                    >
 
-                        <span class="nexus-brand__name">
+                        <span
+                            class="nexus-brand__name"
+                        >
                             NEXUS CONNECT
                         </span>
 
-                        <span class="nexus-brand__company">
+                        <span
+                            class="nexus-brand__company"
+                        >
                             Nexus Buildsolutions Limited
                         </span>
 
@@ -174,16 +250,22 @@
                      HEADER ACTIONS
                      ================================================= -->
 
-                <div class="nexus-header__actions">
+                <div
+                    class="nexus-header__actions"
+                >
 
 
-                    <!-- Notification -->
+                    <!-- =================================================
+                         NOTIFICATIONS
+                         ================================================= -->
 
                     <button
                         type="button"
                         id="notification-button"
                         class="nexus-icon-button"
                         aria-label="Notifications"
+                        aria-haspopup="true"
+                        aria-expanded="false"
                     >
 
                         <span
@@ -204,18 +286,23 @@
                     </button>
 
 
-                    <!-- Profile -->
+                    <!-- =================================================
+                         PROFILE
+                         ================================================= -->
 
                     <button
                         type="button"
                         id="profile-button"
                         class="nexus-profile-button"
                         aria-label="Open profile menu"
+                        aria-haspopup="true"
+                        aria-expanded="false"
                     >
 
                         <span
                             id="profile-avatar"
                             class="nexus-profile-button__avatar"
+                            aria-hidden="true"
                         >
                             G
                         </span>
@@ -230,7 +317,9 @@
                     </button>
 
 
-                    <!-- Mobile menu -->
+                    <!-- =================================================
+                         MOBILE MENU
+                         ================================================= -->
 
                     <button
                         type="button"
@@ -238,8 +327,13 @@
                         class="nexus-mobile-menu-button"
                         aria-label="Open navigation menu"
                         aria-expanded="false"
+                        aria-controls="mobile-navigation"
                     >
-                        ☰
+
+                        <span aria-hidden="true">
+                            ☰
+                        </span>
+
                     </button>
 
                 </div>
@@ -260,6 +354,7 @@
 
                 <a
                     href="#home"
+                    class="nexus-navigation__link is-active"
                     data-nexus-route="home"
                 >
                     Home
@@ -267,6 +362,7 @@
 
                 <a
                     href="#finder"
+                    class="nexus-navigation__link"
                     data-nexus-route="finder"
                 >
                     Nexus Finder
@@ -274,6 +370,7 @@
 
                 <a
                     href="#requests"
+                    class="nexus-navigation__link"
                     data-nexus-route="requests"
                 >
                     Requests
@@ -281,6 +378,7 @@
 
                 <a
                     href="#network"
+                    class="nexus-navigation__link"
                     data-nexus-route="network"
                 >
                     Network
@@ -292,7 +390,7 @@
 
 
         <!-- =========================================================
-             MAIN APPLICATION CONTENT
+             MAIN APPLICATION
              ========================================================= -->
 
         <main
@@ -308,17 +406,26 @@
             <section
                 id="home"
                 class="nexus-hero"
+                aria-labelledby="hero-title"
             >
 
-                <div class="nexus-container nexus-hero__grid">
+                <div
+                    class="nexus-container nexus-hero__grid"
+                >
 
 
-                    <!-- HERO CONTENT -->
+                    <!-- =================================================
+                         HERO CONTENT
+                         ================================================= -->
 
-                    <div class="nexus-hero__content">
+                    <div
+                        class="nexus-hero__content"
+                    >
 
 
-                        <div class="nexus-status-badge">
+                        <div
+                            class="nexus-status-badge"
+                        >
 
                             <span
                                 class="nexus-status-badge__dot"
@@ -330,7 +437,10 @@
                         </div>
 
 
-                        <h1 class="nexus-hero__title">
+                        <h1
+                            id="hero-title"
+                            class="nexus-hero__title"
+                        >
 
                             Find the right person.
 
@@ -341,7 +451,9 @@
                         </h1>
 
 
-                        <p class="nexus-hero__description">
+                        <p
+                            class="nexus-hero__description"
+                        >
 
                             A trusted professional network connecting
                             people with Nexus staff, certified
@@ -355,8 +467,8 @@
                              SMART SEARCH
                              ================================================= -->
 
-                        <div
-                            id="finder"
+                        <form
+                            id="nexus-search-form"
                             class="nexus-search"
                             role="search"
                             aria-label="Nexus Finder"
@@ -377,26 +489,35 @@
                                 name="search"
                                 placeholder="What solution or professional are you looking for?"
                                 autocomplete="off"
+                                spellcheck="false"
                                 aria-label="Search Nexus Connect"
+                                aria-describedby="search-status"
                             >
 
 
                             <button
-                                type="button"
+                                type="submit"
                                 id="nexus-search-button"
                                 class="nexus-button nexus-button--primary"
                             >
                                 Find Solutions
                             </button>
 
-                        </div>
+                        </form>
 
 
-                        <!-- SEARCH EXAMPLES -->
+                        <!-- =================================================
+                             QUICK SEARCH
+                             ================================================= -->
 
-                        <div class="nexus-quick-search">
+                        <div
+                            class="nexus-quick-search"
+                            aria-label="Popular searches"
+                        >
 
-                            <span class="nexus-quick-search__label">
+                            <span
+                                class="nexus-quick-search__label"
+                            >
                                 Try:
                             </span>
 
@@ -421,35 +542,46 @@
                                 type="button"
                                 data-search-query="construction company in Abuja"
                             >
-                                Construction company
+                                Construction company in Abuja
                             </button>
 
                         </div>
 
 
-                        <!-- SEARCH RESULT STATUS -->
+                        <!-- =================================================
+                             SEARCH STATUS
+                             ================================================= -->
 
                         <div
                             id="search-status"
                             class="nexus-search-status"
                             role="status"
                             aria-live="polite"
+                            aria-atomic="true"
                         ></div>
 
                     </div>
 
 
                     <!-- =================================================
-                         HERO TRUST PANEL
+                         HERO NETWORK VISUAL
                          ================================================= -->
 
-                    <div class="nexus-hero__visual">
+                    <div
+                        class="nexus-hero__visual"
+                        aria-label="Nexus professional network"
+                    >
 
 
-                        <div class="nexus-network-orb">
+                        <div
+                            class="nexus-network-orb"
+                            aria-hidden="true"
+                        >
 
 
-                            <div class="nexus-network-orb__core">
+                            <div
+                                class="nexus-network-orb__core"
+                            >
 
                                 <span>
                                     N
@@ -492,9 +624,12 @@
                         </div>
 
 
-                        <div class="nexus-hero__trust">
+                        <div
+                            class="nexus-hero__trust"
+                        >
 
                             <div>
+
                                 <strong>
                                     Trusted Network
                                 </strong>
@@ -502,6 +637,7 @@
                                 <span>
                                     Identity • Skills • Location • Verification
                                 </span>
+
                             </div>
 
                         </div>
@@ -520,20 +656,27 @@
             <section
                 id="platform"
                 class="nexus-section"
+                aria-labelledby="platform-title"
             >
 
-                <div class="nexus-container">
+                <div
+                    class="nexus-container"
+                >
 
 
-                    <div class="nexus-section-heading">
+                    <div
+                        class="nexus-section-heading"
+                    >
 
                         <div>
 
-                            <span class="nexus-eyebrow">
+                            <span
+                                class="nexus-eyebrow"
+                            >
                                 NEXUS CONNECT PLATFORM
                             </span>
 
-                            <h2>
+                            <h2 id="platform-title">
                                 One network. Multiple ways to solve problems.
                             </h2>
 
@@ -549,18 +692,29 @@
                     </div>
 
 
-                    <div class="nexus-capability-grid">
+                    <div
+                        class="nexus-capability-grid"
+                    >
 
 
-                        <!-- FINDER -->
+                        <!-- =================================================
+                             FINDER
+                             ================================================= -->
 
-                        <article class="nexus-capability-card">
+                        <article
+                            class="nexus-capability-card"
+                        >
 
-                            <div class="nexus-capability-card__icon">
+                            <div
+                                class="nexus-capability-card__icon"
+                                aria-hidden="true"
+                            >
                                 ⌕
                             </div>
 
-                            <span class="nexus-capability-card__label">
+                            <span
+                                class="nexus-capability-card__label"
+                            >
                                 DISCOVER
                             </span>
 
@@ -584,15 +738,24 @@
                         </article>
 
 
-                        <!-- MATCH -->
+                        <!-- =================================================
+                             MATCH
+                             ================================================= -->
 
-                        <article class="nexus-capability-card">
+                        <article
+                            class="nexus-capability-card"
+                        >
 
-                            <div class="nexus-capability-card__icon">
+                            <div
+                                class="nexus-capability-card__icon"
+                                aria-hidden="true"
+                            >
                                 ◎
                             </div>
 
-                            <span class="nexus-capability-card__label">
+                            <span
+                                class="nexus-capability-card__label"
+                            >
                                 INTELLIGENCE
                             </span>
 
@@ -616,15 +779,24 @@
                         </article>
 
 
-                        <!-- REQUEST -->
+                        <!-- =================================================
+                             REQUEST
+                             ================================================= -->
 
-                        <article class="nexus-capability-card">
+                        <article
+                            class="nexus-capability-card"
+                        >
 
-                            <div class="nexus-capability-card__icon">
+                            <div
+                                class="nexus-capability-card__icon"
+                                aria-hidden="true"
+                            >
                                 □
                             </div>
 
-                            <span class="nexus-capability-card__label">
+                            <span
+                                class="nexus-capability-card__label"
+                            >
                                 SOLUTIONS
                             </span>
 
@@ -648,15 +820,24 @@
                         </article>
 
 
-                        <!-- CONNECT -->
+                        <!-- =================================================
+                             CONNECT
+                             ================================================= -->
 
-                        <article class="nexus-capability-card">
+                        <article
+                            class="nexus-capability-card"
+                        >
 
-                            <div class="nexus-capability-card__icon">
+                            <div
+                                class="nexus-capability-card__icon"
+                                aria-hidden="true"
+                            >
                                 ◇
                             </div>
 
-                            <span class="nexus-capability-card__label">
+                            <span
+                                class="nexus-capability-card__label"
+                            >
                                 COMMUNICATION
                             </span>
 
@@ -693,20 +874,27 @@
             <section
                 id="network"
                 class="nexus-section nexus-section--trust"
+                aria-labelledby="network-title"
             >
 
-                <div class="nexus-container">
+                <div
+                    class="nexus-container"
+                >
 
 
-                    <div class="nexus-section-heading">
+                    <div
+                        class="nexus-section-heading"
+                    >
 
                         <div>
 
-                            <span class="nexus-eyebrow">
+                            <span
+                                class="nexus-eyebrow"
+                            >
                                 TRUST & VERIFICATION
                             </span>
 
-                            <h2>
+                            <h2 id="network-title">
                                 Know who you are connecting with.
                             </h2>
 
@@ -720,20 +908,33 @@
                     </div>
 
 
-                    <div class="nexus-identity-grid">
+                    <div
+                        class="nexus-identity-grid"
+                    >
 
 
-                        <!-- NEXUS STAFF -->
+                        <!-- =================================================
+                             NEXUS STAFF
+                             ================================================= -->
 
-                        <article class="nexus-identity-card">
+                        <article
+                            class="nexus-identity-card"
+                        >
 
-                            <div class="nexus-identity-card__top">
+                            <div
+                                class="nexus-identity-card__top"
+                            >
 
-                                <div class="nexus-identity-card__avatar">
+                                <div
+                                    class="nexus-identity-card__avatar"
+                                    aria-hidden="true"
+                                >
                                     NS
                                 </div>
 
-                                <span class="nexus-badge nexus-badge--staff">
+                                <span
+                                    class="nexus-badge nexus-badge--staff"
+                                >
                                     NEXUS STAFF
                                 </span>
 
@@ -751,17 +952,28 @@
                         </article>
 
 
-                        <!-- CERTIFIED PROFESSIONAL -->
+                        <!-- =================================================
+                             NEXUS CERTIFIED PROFESSIONAL
+                             ================================================= -->
 
-                        <article class="nexus-identity-card">
+                        <article
+                            class="nexus-identity-card"
+                        >
 
-                            <div class="nexus-identity-card__top">
+                            <div
+                                class="nexus-identity-card__top"
+                            >
 
-                                <div class="nexus-identity-card__avatar">
+                                <div
+                                    class="nexus-identity-card__avatar"
+                                    aria-hidden="true"
+                                >
                                     CP
                                 </div>
 
-                                <span class="nexus-badge nexus-badge--certified">
+                                <span
+                                    class="nexus-badge nexus-badge--certified"
+                                >
                                     NEXUS CERTIFIED
                                 </span>
 
@@ -779,17 +991,28 @@
                         </article>
 
 
-                        <!-- CERTIFIED BUSINESS -->
+                        <!-- =================================================
+                             NEXUS CERTIFIED BUSINESS
+                             ================================================= -->
 
-                        <article class="nexus-identity-card">
+                        <article
+                            class="nexus-identity-card"
+                        >
 
-                            <div class="nexus-identity-card__top">
+                            <div
+                                class="nexus-identity-card__top"
+                            >
 
-                                <div class="nexus-identity-card__avatar">
+                                <div
+                                    class="nexus-identity-card__avatar"
+                                    aria-hidden="true"
+                                >
                                     CB
                                 </div>
 
-                                <span class="nexus-badge nexus-badge--business">
+                                <span
+                                    class="nexus-badge nexus-badge--business"
+                                >
                                     CERTIFIED BUSINESS
                                 </span>
 
@@ -807,17 +1030,28 @@
                         </article>
 
 
-                        <!-- VERIFIED USER -->
+                        <!-- =================================================
+                             VERIFIED USER
+                             ================================================= -->
 
-                        <article class="nexus-identity-card">
+                        <article
+                            class="nexus-identity-card"
+                        >
 
-                            <div class="nexus-identity-card__top">
+                            <div
+                                class="nexus-identity-card__top"
+                            >
 
-                                <div class="nexus-identity-card__avatar">
+                                <div
+                                    class="nexus-identity-card__avatar"
+                                    aria-hidden="true"
+                                >
                                     VU
                                 </div>
 
-                                <span class="nexus-badge nexus-badge--verified">
+                                <span
+                                    class="nexus-badge nexus-badge--verified"
+                                >
                                     VERIFIED USER
                                 </span>
 
@@ -848,21 +1082,30 @@
             <section
                 id="requests"
                 class="nexus-section"
+                aria-labelledby="requests-title"
             >
 
-                <div class="nexus-container">
+                <div
+                    class="nexus-container"
+                >
 
 
-                    <div class="nexus-request-panel">
+                    <div
+                        class="nexus-request-panel"
+                    >
 
 
-                        <div class="nexus-request-panel__content">
+                        <div
+                            class="nexus-request-panel__content"
+                        >
 
-                            <span class="nexus-eyebrow">
+                            <span
+                                class="nexus-eyebrow"
+                            >
                                 NEXUS REQUEST
                             </span>
 
-                            <h2>
+                            <h2 id="requests-title">
                                 Tell Nexus what you need.
                             </h2>
 
@@ -873,7 +1116,9 @@
                             </p>
 
 
-                            <div class="nexus-request-example">
+                            <div
+                                class="nexus-request-example"
+                            >
 
                                 <span>
                                     Example
@@ -891,6 +1136,7 @@
                                 type="button"
                                 id="create-request-button"
                                 class="nexus-button nexus-button--gold"
+                                data-request-service="professional service"
                             >
                                 Create a Request
                             </button>
@@ -898,12 +1144,19 @@
                         </div>
 
 
-                        <!-- REQUEST FLOW -->
+                        <!-- =================================================
+                             REQUEST FLOW
+                             ================================================= -->
 
-                        <div class="nexus-request-flow">
+                        <div
+                            class="nexus-request-flow"
+                            aria-label="Nexus request process"
+                        >
 
 
-                            <div class="nexus-flow-step">
+                            <div
+                                class="nexus-flow-step"
+                            >
 
                                 <span>
                                     01
@@ -916,10 +1169,15 @@
                             </div>
 
 
-                            <div class="nexus-flow-line"></div>
+                            <div
+                                class="nexus-flow-line"
+                                aria-hidden="true"
+                            ></div>
 
 
-                            <div class="nexus-flow-step">
+                            <div
+                                class="nexus-flow-step"
+                            >
 
                                 <span>
                                     02
@@ -932,10 +1190,15 @@
                             </div>
 
 
-                            <div class="nexus-flow-line"></div>
+                            <div
+                                class="nexus-flow-line"
+                                aria-hidden="true"
+                            ></div>
 
 
-                            <div class="nexus-flow-step">
+                            <div
+                                class="nexus-flow-step"
+                            >
 
                                 <span>
                                     03
@@ -948,10 +1211,15 @@
                             </div>
 
 
-                            <div class="nexus-flow-line"></div>
+                            <div
+                                class="nexus-flow-line"
+                                aria-hidden="true"
+                            ></div>
 
 
-                            <div class="nexus-flow-step">
+                            <div
+                                class="nexus-flow-step"
+                            >
 
                                 <span>
                                     04
@@ -976,26 +1244,40 @@
                  PROFESSIONAL TRUST PROMISE
                  ===================================================== -->
 
-            <section class="nexus-section nexus-section--trust-promise">
+            <section
+                class="nexus-section nexus-section--trust-promise"
+                aria-labelledby="trust-promise-title"
+            >
 
-                <div class="nexus-container">
+                <div
+                    class="nexus-container"
+                >
 
 
-                    <div class="nexus-trust-promise">
+                    <div
+                        class="nexus-trust-promise"
+                    >
 
 
-                        <div class="nexus-trust-promise__icon">
+                        <div
+                            class="nexus-trust-promise__icon"
+                            aria-hidden="true"
+                        >
                             ✓
                         </div>
 
 
-                        <div class="nexus-trust-promise__content">
+                        <div
+                            class="nexus-trust-promise__content"
+                        >
 
-                            <span class="nexus-eyebrow">
+                            <span
+                                class="nexus-eyebrow"
+                            >
                                 NEXUS TRUST
                             </span>
 
-                            <h2>
+                            <h2 id="trust-promise-title">
                                 Verification should mean something.
                             </h2>
 
@@ -1025,24 +1307,33 @@
 
 
             <!-- =====================================================
-                 FUTURE PLATFORM
+                 2030 PLATFORM VISION
                  ===================================================== -->
 
-            <section class="nexus-section nexus-section--future">
+            <section
+                class="nexus-section nexus-section--future"
+                aria-labelledby="future-title"
+            >
 
-                <div class="nexus-container">
+                <div
+                    class="nexus-container"
+                >
 
 
-                    <div class="nexus-future-panel">
+                    <div
+                        class="nexus-future-panel"
+                    >
 
 
                         <div>
 
-                            <span class="nexus-eyebrow">
+                            <span
+                                class="nexus-eyebrow"
+                            >
                                 BUILT FOR 2030
                             </span>
 
-                            <h2>
+                            <h2 id="future-title">
                                 A platform designed to grow with Nexus.
                             </h2>
 
@@ -1057,7 +1348,9 @@
                         </div>
 
 
-                        <div class="nexus-future-grid">
+                        <div
+                            class="nexus-future-grid"
+                        >
 
                             <span>
                                 AI Search
@@ -1091,6 +1384,7 @@
 
             </section>
 
+
         </main>
 
 
@@ -1098,12 +1392,39 @@
              GLOBAL FOOTER
              ========================================================= -->
 
-        <footer class="nexus-footer">
+        <footer
+            class="nexus-footer"
+        >
 
-            <div class="nexus-container nexus-footer__inner">
+            <div
+                class="nexus-container nexus-footer__inner"
+            >
 
 
-                <div class="nexus-footer__brand">
+                <!-- =================================================
+                     FOOTER BRAND
+                     ================================================= -->
+
+                <div
+                    class="nexus-footer__brand"
+                >
+
+                    <div
+                        class="nexus-footer__logo-wrap"
+                    >
+
+                        <img
+                            src="/assets/logo/Screenshot%202025-09-29%20122409.png"
+                            alt="Nexus Buildsolutions Limited"
+                            class="nexus-footer__logo"
+                            width="150"
+                            height="76"
+                            loading="lazy"
+                            decoding="async"
+                        >
+
+                    </div>
+
 
                     <strong>
                         NEXUS CONNECT
@@ -1121,7 +1442,14 @@
                 </div>
 
 
-                <div class="nexus-footer__links">
+                <!-- =================================================
+                     FOOTER NAVIGATION
+                     ================================================= -->
+
+                <nav
+                    class="nexus-footer__links"
+                    aria-label="Footer navigation"
+                >
 
                     <a href="#home">
                         Home
@@ -1139,10 +1467,16 @@
                         Network
                     </a>
 
-                </div>
+                </nav>
 
 
-                <div class="nexus-footer__legal">
+                <!-- =================================================
+                     FOOTER LEGAL
+                     ================================================= -->
+
+                <div
+                    class="nexus-footer__legal"
+                >
 
                     <span>
                         Nexus Connect 2030
@@ -1164,27 +1498,13 @@
 
     <!-- =========================================================
          APPLICATION JAVASCRIPT
-         =========================================================
-
-         Main application logic:
-
-         /public/js/app.js
-
-         This will eventually handle:
-         - navigation
-         - search
-         - API communication
-         - authentication
-         - requests
-         - notifications
-         - user sessions
-         - real-time events
          ========================================================= -->
 
     <script
         src="./js/app.js"
         defer
     ></script>
+
 
 </body>
 </html>
