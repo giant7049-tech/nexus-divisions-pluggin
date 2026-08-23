@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 64 64"
+    width="64"
+    height="64"
+    role="img"
+    aria-labelledby="nexusIconTitle nexusIconDesc"
+>
+
+    <title id="nexusIconTitle">
+        Nexus Connect
+    </title>
+
+    <desc id="nexusIconDesc">
+        Nexus Connect professional network icon for Nexus Buildsolutions Limited
+    </desc>
+
+
+    <!-- =========================================================
+         NEXUS CONNECT MASTER ICON
+         Nexus Buildsolutions Limited
+         ========================================================= -->
+
+
+    <!-- Outer network ring -->
+
+    <circle
+        cx="32"
+        cy="32"
+        r="27"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        opacity="0.22"
+    />
+
+
+    <!-- Network connection lines -->
+
+    <path
+        d="M32 32 L13 20"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        opacity="0.75"
+    />
+
+    <path
+        d="M32 32 L51 20"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        opacity="0.75"
+    />
+
+    <path
+        d="M32 32 L13 44"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        opacity="0.75"
+    />
+
+    <path
+        d="M32 32 L51 44"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        opacity="0.75"
+    />
+
+
+    <!-- =========================================================
+         OUTER NETWORK NODES
+         ========================================================= -->
+
+    <circle
+        cx="13"
+        cy="20"
+        r="5"
+        fill="currentColor"
+    />
+
+    <circle
+        cx="51"
+        cy="20"
+        r="5"
+        fill="currentColor"
+    />
+
+    <circle
+        cx="13"
+        cy="44"
+        r="5"
+        fill="currentColor"
+    />
+
+    <circle
+        cx="51"
+        cy="44"
+        r="5"
+        fill="currentColor"
+    />
+
+
+    <!-- =========================================================
+         CENTRAL NEXUS
+         ========================================================= -->
+
+    <circle
+        cx="32"
+        cy="32"
+        r="12"
+        fill="currentColor"
+    />
+
+
+    <!-- Central N -->
+
+    <path
+        d="M26 38 V26 L38 38 V26"
+        fill="none"
+        stroke="white"
+        stroke-width="3"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+    />
+
+
+</svg>
