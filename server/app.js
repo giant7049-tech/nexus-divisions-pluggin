@@ -12,6 +12,7 @@
  * Responsibility:
  *     - Create and configure the Express application
  *     - Configure security middleware
+ *     - Configure CORS
  *     - Configure JSON/body parsing
  *     - Serve the Nexus Connect frontend
  *     - Mount API routes
@@ -41,14 +42,32 @@ const NODE_ENV = config.app.environment;
 const PUBLIC_DIR = config.frontend.publicDirectory;
 const API_PREFIX = config.api.prefix;
 
+
+/**
+ * ================================================================
+ * MIDDLEWARE
+ * ================================================================
+ *
+ * These names MUST match the exports from middleware.js.
+ * ================================================================
+ */
+
 const {
-    securityMiddleware,
-    requestIdMiddleware,
-    requestLoggerMiddleware,
+    securityHeaders,
+    corsMiddleware,
+    requestId,
+    requestLogger,
     apiRateLimiter,
     errorHandler,
     notFoundHandler
 } = require('./middleware');
+
+
+/**
+ * ================================================================
+ * API ROUTES
+ * ================================================================
+ */
 
 const {
     router: apiRouter
@@ -77,6 +96,7 @@ app.set('trust proxy', 1);
 app.set('etag', 'strong');
 
 app.locals.appName = APP_NAME;
+
 app.locals.environment = NODE_ENV;
 
 
@@ -85,14 +105,24 @@ app.locals.environment = NODE_ENV;
  * CORE SECURITY
  * ================================================================
  *
- * securityMiddleware is responsible for the application's
- * HTTP security headers and related protection.
- *
- * It should remain centralized in middleware.js.
+ * Security headers are defined in middleware.js.
  * ================================================================
  */
 
-app.use(securityMiddleware);
+app.use(securityHeaders);
+
+
+/**
+ * ================================================================
+ * CORS
+ * ================================================================
+ *
+ * CORS is defined in middleware.js and uses the configured
+ * CORS_ORIGINS environment setting.
+ * ================================================================
+ */
+
+app.use(corsMiddleware);
 
 
 /**
@@ -100,25 +130,11 @@ app.use(securityMiddleware);
  * REQUEST IDENTIFICATION
  * ================================================================
  *
- * Every request receives a unique identifier.
- *
- * This becomes extremely useful when debugging:
- *
- *     browser
- *        ↓
- *     request ID
- *        ↓
- *     API
- *        ↓
- *     database
- *        ↓
- *     logs
- *
- * The same ID can be used to trace a failed request.
+ * Every request receives a unique request ID.
  * ================================================================
  */
 
-app.use(requestIdMiddleware);
+app.use(requestId);
 
 
 /**
@@ -127,7 +143,7 @@ app.use(requestIdMiddleware);
  * ================================================================
  */
 
-app.use(requestLoggerMiddleware);
+app.use(requestLogger);
 
 
 /**
@@ -153,6 +169,7 @@ app.use(
     })
 );
 
+
 app.use(
     express.urlencoded({
         extended: true,
@@ -166,27 +183,39 @@ app.use(
  * HEALTH ENDPOINT
  * ================================================================
  *
- * This endpoint is intentionally lightweight.
- *
  * Render and monitoring systems can use:
  *
  *     GET /health
  *
  * to determine whether the Node.js process is responding.
  *
- * It does NOT perform an expensive database query.
+ * This endpoint does NOT perform an expensive database query.
  * ================================================================
  */
 
 app.get('/health', (req, res) => {
+
     res.status(200).json({
+
         success: true,
-        service: APP_NAME,
-        status: 'healthy',
-        environment: NODE_ENV,
-        timestamp: new Date().toISOString(),
-        requestId: req.id || null
+
+        service:
+            APP_NAME,
+
+        status:
+            'healthy',
+
+        environment:
+            NODE_ENV,
+
+        timestamp:
+            new Date().toISOString(),
+
+        requestId:
+            req.requestId || null
+
     });
+
 });
 
 
@@ -194,8 +223,6 @@ app.get('/health', (req, res) => {
  * ================================================================
  * READINESS ENDPOINT
  * ================================================================
- *
- * This endpoint is different from /health.
  *
  * /health:
  *     "Is the Node process alive?"
@@ -207,41 +234,85 @@ app.get('/health', (req, res) => {
  * ================================================================
  */
 
-app.get('/ready', async (req, res, next) => {
-    try {
-        const {
-            isDatabaseReady
-        } = require('./services');
+app.get(
+    '/ready',
+    async (req, res, next) => {
 
-        const databaseReady = await isDatabaseReady();
+        try {
 
-        if (!databaseReady) {
-            return res.status(503).json({
-                success: false,
-                service: APP_NAME,
-                status: 'not_ready',
+            const {
+                isDatabaseReady
+            } = require('./services');
+
+
+            const databaseReady =
+                await isDatabaseReady();
+
+
+            if (!databaseReady) {
+
+                return res.status(503).json({
+
+                    success: false,
+
+                    service:
+                        APP_NAME,
+
+                    status:
+                        'not_ready',
+
+                    dependencies: {
+
+                        database:
+                            false
+
+                    },
+
+                    timestamp:
+                        new Date().toISOString(),
+
+                    requestId:
+                        req.requestId || null
+
+                });
+
+            }
+
+
+            return res.status(200).json({
+
+                success: true,
+
+                service:
+                    APP_NAME,
+
+                status:
+                    'ready',
+
                 dependencies: {
-                    database: false
+
+                    database:
+                        true
+
                 },
-                timestamp: new Date().toISOString(),
-                requestId: req.id || null
+
+                timestamp:
+                    new Date().toISOString(),
+
+                requestId:
+                    req.requestId || null
+
             });
+
+
+        } catch (error) {
+
+            return next(error);
+
         }
 
-        return res.status(200).json({
-            success: true,
-            service: APP_NAME,
-            status: 'ready',
-            dependencies: {
-                database: true
-            },
-            timestamp: new Date().toISOString(),
-            requestId: req.id || null
-        });
-    } catch (error) {
-        return next(error);
     }
-});
+);
 
 
 /**
@@ -250,9 +321,6 @@ app.get('/ready', async (req, res, next) => {
  * ================================================================
  *
  * Rate limiting is applied before API routes.
- *
- * More sensitive authentication endpoints can additionally use
- * stricter route-level limits inside routes.js.
  * ================================================================
  */
 
@@ -270,8 +338,6 @@ app.use(
  * All application API endpoints are mounted under:
  *
  *     /api
- *
- * or whatever API_PREFIX is configured to.
  *
  * Example:
  *
@@ -294,14 +360,6 @@ app.use(
  * STATIC FRONTEND
  * ================================================================
  *
- * Nexus Connect is a unified application:
- *
- *     Express
- *        │
- *        ├── API
- *        │
- *        └── Frontend
- *
  * The public directory contains:
  *
  *     index.html
@@ -309,21 +367,30 @@ app.use(
  *     js/
  *     assets/
  *
- * This allows Render to serve the frontend and backend from
- * the same application/domain.
+ * Express serves these files directly.
  * ================================================================
  */
 
 app.use(
-    express.static(PUBLIC_DIR, {
-        index: false,
-        extensions: ['html'],
-        maxAge: NODE_ENV === 'production'
-            ? '7d'
-            : 0,
-        etag: true,
-        redirect: false
-    })
+    express.static(
+        PUBLIC_DIR,
+        {
+            index: false,
+
+            extensions: [
+                'html'
+            ],
+
+            maxAge:
+                NODE_ENV === 'production'
+                    ? '7d'
+                    : 0,
+
+            etag: true,
+
+            redirect: false
+        }
+    )
 );
 
 
@@ -332,9 +399,7 @@ app.use(
  * FRONTEND APPLICATION ROUTING
  * ================================================================
  *
- * Nexus Connect is designed as a frontend application.
- *
- * Routes such as:
+ * Browser routes such as:
  *
  *     /connect
  *     /connect/@username
@@ -343,10 +408,7 @@ app.use(
  *     /discover
  *     /settings
  *
- * may eventually be handled by the frontend.
- *
- * We therefore return index.html for non-API browser navigation
- * requests.
+ * can be handled by the frontend application.
  *
  * API requests are NOT allowed to fall through to this handler.
  * ================================================================
@@ -355,44 +417,77 @@ app.use(
 app.get(
     '*',
     (req, res, next) => {
-        const requestPath = req.path || '';
+
+        const requestPath =
+            req.path || '';
+
 
         /**
-         * Never return the frontend for API requests.
+         * --------------------------------------------------------
+         * API REQUESTS
+         * --------------------------------------------------------
          */
 
         if (
             requestPath === API_PREFIX ||
-            requestPath.startsWith(`${API_PREFIX}/`)
+            requestPath.startsWith(
+                `${API_PREFIX}/`
+            )
         ) {
+
             return next();
+
         }
 
+
         /**
-         * Never return the frontend for health/readiness endpoints.
+         * --------------------------------------------------------
+         * HEALTH / READY
+         * --------------------------------------------------------
          */
 
         if (
             requestPath === '/health' ||
             requestPath === '/ready'
         ) {
+
             return next();
+
         }
 
+
         /**
-         * Only handle browser-style GET requests.
+         * --------------------------------------------------------
+         * BROWSER GET REQUESTS
+         * --------------------------------------------------------
          */
 
         if (
             req.method !== 'GET' ||
-            req.headers.accept?.includes('text/html') !== true
+            !req.headers.accept ||
+            !req.headers.accept.includes(
+                'text/html'
+            )
         ) {
+
             return next();
+
         }
 
+
+        /**
+         * --------------------------------------------------------
+         * FRONTEND ENTRY
+         * --------------------------------------------------------
+         */
+
         return res.sendFile(
-            path.join(PUBLIC_DIR, 'index.html')
+            path.join(
+                PUBLIC_DIR,
+                config.frontend.entry
+            )
         );
+
     }
 );
 
@@ -414,7 +509,9 @@ app.get(
  * ================================================================
  */
 
-app.use(notFoundHandler);
+app.use(
+    notFoundHandler
+);
 
 
 /**
@@ -423,32 +520,17 @@ app.use(notFoundHandler);
  * ================================================================
  *
  * This MUST remain the final middleware.
- *
- * It prevents raw server errors from being exposed to users.
- *
- * Development:
- *     detailed logging
- *
- * Production:
- *     safe public error response
- *
- * The internal error is still logged server-side.
  * ================================================================
  */
 
-app.use(errorHandler);
+app.use(
+    errorHandler
+);
 
 
 /**
  * ================================================================
  * EXPORT
- * ================================================================
- *
- * server.js imports this application instance:
- *
- *     const app = require('./app');
- *
- * and then creates the HTTP server.
  * ================================================================
  */
 
