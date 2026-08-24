@@ -34,13 +34,15 @@
 
 const http = require('http');
 
-const {
-    PORT,
-    HOST,
-    NODE_ENV,
-    APP_NAME,
-    SHUTDOWN_TIMEOUT_MS
-} = require('./config');
+const config = require('./config');
+
+const PORT = config.server.port;
+const HOST = config.server.host;
+const NODE_ENV = config.app.environment;
+const APP_NAME = config.app.name;
+
+const SHUTDOWN_TIMEOUT_MS =
+    Number(process.env.SHUTDOWN_TIMEOUT_MS || 10000);
 
 const app = require('./app');
 
