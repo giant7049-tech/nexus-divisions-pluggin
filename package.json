@@ -1,47 +1,19 @@
 {
   "name": "nexus-connect",
-  "version": "1.0.0",
-  "description": "Nexus Connect — secure, realtime social and professional communication platform for the Nexus ecosystem.",
+  "version": "2.0.0",
+  "description": "Nexus Connect secure real-time communication platform",
   "private": true,
-  "license": "UNLICENSED",
-  "author": {
-    "name": "Nexus Buildsolutions Limited"
-  },
-  "homepage": "https://nexusbuildsolutions.rf.gd",
-  "keywords": [
-    "nexus",
-    "nexus-connect",
-    "communication",
-    "messaging",
-    "realtime",
-    "social-platform",
-    "business-platform"
-  ],
-
-  "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=10.0.0"
-  },
-
-  "main": "server/server.js",
-
+  "main": "server.js",
   "scripts": {
-    "start": "node server/server.js",
-    "dev": "node --watch server/server.js",
-    "check": "node --check server/server.js",
-    "check:app": "node --check server/app.js",
-    "check:routes": "node --check server/routes.js",
-    "check:services": "node --check server/services.js",
-    "check:middleware": "node --check server/middleware.js",
-    "check:sockets": "node --check server/sockets.js",
-    "check:models": "node --check server/models.js",
-    "check:config": "node --check server/config.js",
-    "check:all": "npm run check && npm run check:app && npm run check:routes && npm run check:services && npm run check:middleware && npm run check:sockets && npm run check:models && npm run check:config"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
-
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "compression": "^1.8.1",
+    "cloudinary": "^2.7.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -50,20 +22,8 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
-    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.5",
     "socket.io": "^4.8.1"
-  },
-
-  "devDependencies": {},
-
-  "type": "commonjs",
-
-  "overrides": {},
-
-  "files": [
-    "public/",
-    "server/",
-    "README.md",
-    ".env.example"
-  ]
+  }
 }
