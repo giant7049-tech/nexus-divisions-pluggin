@@ -832,15 +832,14 @@ validateConfig();
  * EXPORT
  * ================================================================ */
 
-module.exports = config;
-
-
 /* ================================================================
- * OPTIONAL UTILITIES
+ * EXPORT
  * ================================================================ */
 
-module.exports.validateConfig =
-    validateConfig;
+module.exports = Object.freeze({
+    ...config,
 
-module.exports.getSafeConfigSummary =
-    getSafeConfigSummary;
+    validateConfig,
+
+    getSafeConfigSummary
+});
