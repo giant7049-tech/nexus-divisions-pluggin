@@ -37,10 +37,20 @@ const path = require('path');
 
 const config = require('./config');
 
-const APP_NAME = config.app.name;
-const NODE_ENV = config.app.environment;
-const PUBLIC_DIR = config.frontend.publicDirectory;
-const API_PREFIX = config.api.prefix;
+const APP_NAME =
+    config.app.name;
+
+const NODE_ENV =
+    config.app.environment;
+
+const PUBLIC_DIR =
+    config.frontend.publicDirectory;
+
+const FRONTEND_ENTRY =
+    config.frontend.entry;
+
+const API_PREFIX =
+    config.api.prefix;
 
 
 /**
@@ -67,9 +77,13 @@ const {
  * ================================================================
  * API ROUTES
  * ================================================================
+ *
+ * routes.js exports the Express router directly.
+ * ================================================================
  */
 
-const apiRouter = require('./routes');;
+const apiRouter =
+    require('./routes');
 
 
 /**
@@ -78,7 +92,8 @@ const apiRouter = require('./routes');;
  * ================================================================
  */
 
-const app = express();
+const app =
+    express();
 
 
 /**
@@ -87,15 +102,25 @@ const app = express();
  * ================================================================
  */
 
-app.disable('x-powered-by');
+app.disable(
+    'x-powered-by'
+);
 
-app.set('trust proxy', 1);
+app.set(
+    'trust proxy',
+    1
+);
 
-app.set('etag', 'strong');
+app.set(
+    'etag',
+    'strong'
+);
 
-app.locals.appName = APP_NAME;
+app.locals.appName =
+    APP_NAME;
 
-app.locals.environment = NODE_ENV;
+app.locals.environment =
+    NODE_ENV;
 
 
 /**
@@ -107,7 +132,9 @@ app.locals.environment = NODE_ENV;
  * ================================================================
  */
 
-app.use(securityHeaders);
+app.use(
+    securityHeaders
+);
 
 
 /**
@@ -120,7 +147,9 @@ app.use(securityHeaders);
  * ================================================================
  */
 
-app.use(corsMiddleware);
+app.use(
+    corsMiddleware
+);
 
 
 /**
@@ -132,7 +161,9 @@ app.use(corsMiddleware);
  * ================================================================
  */
 
-app.use(requestId);
+app.use(
+    requestId
+);
 
 
 /**
@@ -141,7 +172,9 @@ app.use(requestId);
  * ================================================================
  */
 
-app.use(requestLogger);
+app.use(
+    requestLogger
+);
 
 
 /**
@@ -191,30 +224,34 @@ app.use(
  * ================================================================
  */
 
-app.get('/health', (req, res) => {
+app.get(
+    '/health',
+    (req, res) => {
 
-    res.status(200).json({
+        res.status(200).json({
 
-        success: true,
+            success:
+                true,
 
-        service:
-            APP_NAME,
+            service:
+                APP_NAME,
 
-        status:
-            'healthy',
+            status:
+                'healthy',
 
-        environment:
-            NODE_ENV,
+            environment:
+                NODE_ENV,
 
-        timestamp:
-            new Date().toISOString(),
+            timestamp:
+                new Date().toISOString(),
 
-        requestId:
-            req.requestId || null
+            requestId:
+                req.requestId || null
 
-    });
+        });
 
-});
+    }
+);
 
 
 /**
@@ -251,7 +288,8 @@ app.get(
 
                 return res.status(503).json({
 
-                    success: false,
+                    success:
+                        false,
 
                     service:
                         APP_NAME,
@@ -279,7 +317,8 @@ app.get(
 
             return res.status(200).json({
 
-                success: true,
+                success:
+                    true,
 
                 service:
                     APP_NAME,
@@ -305,7 +344,9 @@ app.get(
 
         } catch (error) {
 
-            return next(error);
+            return next(
+                error
+            );
 
         }
 
@@ -373,7 +414,8 @@ app.use(
     express.static(
         PUBLIC_DIR,
         {
-            index: false,
+            index:
+                false,
 
             extensions: [
                 'html'
@@ -384,9 +426,11 @@ app.use(
                     ? '7d'
                     : 0,
 
-            etag: true,
+            etag:
+                true,
 
-            redirect: false
+            redirect:
+                false
         }
     )
 );
@@ -408,12 +452,24 @@ app.use(
  *
  * can be handled by the frontend application.
  *
+ * IMPORTANT:
+ *
+ * Express 5 does NOT accept:
+ *
+ *     app.get('*', ...)
+ *
+ * Therefore we use:
+ *
+ *     app.get('/{*splat}', ...)
+ *
+ * This is the Express 5-compatible wildcard route.
+ *
  * API requests are NOT allowed to fall through to this handler.
  * ================================================================
  */
 
 app.get(
-    '*',
+    '/{*splat}',
     (req, res, next) => {
 
         const requestPath =
@@ -482,7 +538,7 @@ app.get(
         return res.sendFile(
             path.join(
                 PUBLIC_DIR,
-                config.frontend.entry
+                FRONTEND_ENTRY
             )
         );
 
@@ -532,4 +588,5 @@ app.use(
  * ================================================================
  */
 
-module.exports = app;
+module.exports =
+    app;
