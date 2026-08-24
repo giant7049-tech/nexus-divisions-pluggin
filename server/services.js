@@ -2,6 +2,7 @@
 
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 
 const {
   User,
@@ -14,14 +15,14 @@ const {
 
 const config = require('./config');
 
+
 /**
  * ============================================================
  * NEXUS CONNECT — SERVICE LAYER
  * ============================================================
  *
- * This file contains the application's business logic.
- *
  * Responsibilities:
+ * - Database connection management
  * - Authentication
  * - User registration
  * - PIN security
@@ -59,6 +60,114 @@ class AppError extends Error {
 
 
 /* ============================================================
+   DATABASE CONNECTION SERVICES
+============================================================ */
+
+/**
+ * Get the configured MongoDB connection string.
+ *
+ * Supports several possible config structures so the service
+ * remains compatible with the current Nexus configuration.
+ */
+function getDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ||
+    config.databaseUrl ||
+    config.database?.url ||
+    config.database?.uri ||
+    config.mongodb?.url ||
+    config.mongodb?.uri ||
+    null
+  );
+}
+
+
+/**
+ * Connect to MongoDB.
+ *
+ * This function is called by server.js before the HTTP server
+ * starts accepting requests.
+ */
+async function connectDatabase() {
+  const databaseUrl = getDatabaseUrl();
+
+  if (!databaseUrl) {
+    throw new AppError(
+      'DATABASE_URL is not configured.',
+      500,
+      'DATABASE_CONFIGURATION_ERROR'
+    );
+  }
+
+  /**
+   * 0 = disconnected
+   * 1 = connected
+   * 2 = connecting
+   * 3 = disconnecting
+   */
+
+  if (mongoose.connection.readyState === 1) {
+    console.log(
+      '[NEXUS] MongoDB connection is already active.'
+    );
+
+    return mongoose.connection;
+  }
+
+  mongoose.set('strictQuery', true);
+
+  await mongoose.connect(databaseUrl, {
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    maxPoolSize: 10,
+    minPoolSize: 0,
+  });
+
+  console.log(
+    `[NEXUS] MongoDB connected: ${mongoose.connection.name}`
+  );
+
+  return mongoose.connection;
+}
+
+
+/**
+ * Disconnect from MongoDB.
+ *
+ * Used during graceful application shutdown.
+ */
+async function disconnectDatabase() {
+  if (
+    mongoose.connection.readyState === 0
+  ) {
+    console.log(
+      '[NEXUS] MongoDB is already disconnected.'
+    );
+
+    return;
+  }
+
+  await mongoose.disconnect();
+
+  console.log(
+    '[NEXUS] MongoDB connection closed.'
+  );
+}
+
+
+/**
+ * Check whether MongoDB is ready.
+ *
+ * Used by:
+ *
+ *     GET /ready
+ */
+async function isDatabaseReady() {
+  return mongoose.connection.readyState === 1;
+}
+
+
+/* ============================================================
    UTILITY FUNCTIONS
 ============================================================ */
 
@@ -76,13 +185,6 @@ function normalizeEmail(email) {
  * Normalize usernames.
  *
  * Usernames become lowercase internally.
- * This prevents:
- *
- * Muhammad
- * muhammad
- * MUHAMMAD
- *
- * from becoming different accounts.
  */
 function normalizeUsername(username) {
   return String(username || '')
@@ -155,7 +257,12 @@ function validatePin(pin) {
  * Create a secure JWT session token.
  */
 function generateToken(userId) {
-  if (!config.jwtSecret) {
+  const jwtSecret =
+    config.jwtSecret ||
+    config.jwt?.secret ||
+    process.env.JWT_SECRET;
+
+  if (!jwtSecret) {
     throw new AppError(
       'Server authentication configuration is incomplete.',
       500,
@@ -163,14 +270,20 @@ function generateToken(userId) {
     );
   }
 
+  const expiresIn =
+    config.jwtExpiresIn ||
+    config.jwt?.expiresIn ||
+    process.env.JWT_EXPIRES_IN ||
+    '7d';
+
   return jwt.sign(
     {
       sub: String(userId),
       type: 'access',
     },
-    config.jwtSecret,
+    jwtSecret,
     {
-      expiresIn: config.jwtExpiresIn || '7d',
+      expiresIn,
     }
   );
 }
@@ -230,10 +343,14 @@ async function registerUser({
   pin,
   confirmPin,
 }) {
-  const normalizedEmail = validateEmail(email);
-  const normalizedUsername = validateUsername(username);
+  const normalizedEmail =
+    validateEmail(email);
 
-  const cleanDisplayName = String(displayName || '').trim();
+  const normalizedUsername =
+    validateUsername(username);
+
+  const cleanDisplayName =
+    String(displayName || '').trim();
 
   if (cleanDisplayName.length < 2) {
     throw new AppError(
@@ -251,10 +368,15 @@ async function registerUser({
     );
   }
 
-  const validatedPin = validatePin(pin);
-  const validatedConfirmPin = validatePin(confirmPin);
+  const validatedPin =
+    validatePin(pin);
 
-  if (validatedPin !== validatedConfirmPin) {
+  const validatedConfirmPin =
+    validatePin(confirmPin);
+
+  if (
+    validatedPin !== validatedConfirmPin
+  ) {
     throw new AppError(
       'PIN confirmation does not match.',
       400,
@@ -262,9 +384,10 @@ async function registerUser({
     );
   }
 
-  const existingEmailUser = await User.findOne({
-    email: normalizedEmail,
-  });
+  const existingEmailUser =
+    await User.findOne({
+      email: normalizedEmail,
+    });
 
   if (existingEmailUser) {
     throw new AppError(
@@ -274,9 +397,10 @@ async function registerUser({
     );
   }
 
-  const existingUsernameUser = await User.findOne({
-    username: normalizedUsername,
-  });
+  const existingUsernameUser =
+    await User.findOne({
+      username: normalizedUsername,
+    });
 
   if (existingUsernameUser) {
     throw new AppError(
@@ -287,26 +411,34 @@ async function registerUser({
   }
 
   const saltRounds =
-    Number(config.bcryptSaltRounds) || 12;
+    Number(
+      config.bcryptSaltRounds ||
+      config.security?.bcryptSaltRounds ||
+      process.env.BCRYPT_SALT_ROUNDS
+    ) || 12;
 
-  const pinHash = await bcrypt.hash(
-    validatedPin,
-    saltRounds
-  );
+  const pinHash =
+    await bcrypt.hash(
+      validatedPin,
+      saltRounds
+    );
 
-  const user = await User.create({
-    email: normalizedEmail,
-    username: normalizedUsername,
-    displayName: cleanDisplayName,
-    pinHash,
-    status: 'online',
-    lastSeenAt: new Date(),
-  });
+  const user =
+    await User.create({
+      email: normalizedEmail,
+      username: normalizedUsername,
+      displayName: cleanDisplayName,
+      pinHash,
+      status: 'online',
+      lastSeenAt: new Date(),
+    });
 
-  const token = generateToken(user._id);
+  const token =
+    generateToken(user._id);
 
   return {
-    message: 'Nexus Connect account created successfully.',
+    message:
+      'Nexus Connect account created successfully.',
     token,
     user: sanitizeUser(user),
   };
@@ -331,22 +463,26 @@ async function loginUser({
     );
   }
 
-  const validatedPin = validatePin(pin);
+  const validatedPin =
+    validatePin(pin);
 
   const normalizedIdentifier =
     cleanIdentifier.toLowerCase();
 
-  const user = await User.findOne({
-    $or: [
-      {
-        email: normalizedIdentifier,
-      },
-      {
-        username:
-          normalizeUsername(normalizedIdentifier),
-      },
-    ],
-  });
+  const user =
+    await User.findOne({
+      $or: [
+        {
+          email: normalizedIdentifier,
+        },
+        {
+          username:
+            normalizeUsername(
+              normalizedIdentifier
+            ),
+        },
+      ],
+    });
 
   if (!user) {
     throw new AppError(
@@ -379,7 +515,8 @@ async function loginUser({
     generateToken(user._id);
 
   return {
-    message: 'Login successful.',
+    message:
+      'Login successful.',
     token,
     user: sanitizeUser(user),
   };
@@ -411,11 +548,6 @@ async function getCurrentUser(userId) {
 
 /**
  * Find a user by username.
- *
- * Supports:
- *
- * @muhammad
- * muhammad
  */
 async function getUserByUsername(username) {
   const normalizedUsername =
@@ -451,7 +583,10 @@ async function searchUsers(query, limit = 20) {
 
   const safeLimit =
     Math.min(
-      Math.max(Number(limit) || 20, 1),
+      Math.max(
+        Number(limit) || 20,
+        1
+      ),
       50
     );
 
@@ -462,7 +597,10 @@ async function searchUsers(query, limit = 20) {
     );
 
   const regex =
-    new RegExp(escapedQuery, 'i');
+    new RegExp(
+      escapedQuery,
+      'i'
+    );
 
   const users =
     await User.find({
@@ -481,7 +619,9 @@ async function searchUsers(query, limit = 20) {
       )
       .lean();
 
-  return users.map(getPublicUser);
+  return users.map(
+    getPublicUser
+  );
 }
 
 
@@ -545,7 +685,8 @@ async function updateProfile(
       );
     }
 
-    user.bio = cleanBio;
+    user.bio =
+      cleanBio;
   }
 
   if (
@@ -605,7 +746,9 @@ async function getOrCreateDirectConversation(
   }
 
   const otherUser =
-    await User.findById(otherUserId);
+    await User.findById(
+      otherUserId
+    );
 
   if (!otherUser) {
     throw new AppError(
@@ -727,8 +870,11 @@ async function sendMessage(
       sender: userId,
       content: cleanContent,
       type,
-      replyTo: replyTo || null,
-      deliveredTo: [userId],
+      replyTo:
+        replyTo || null,
+      deliveredTo: [
+        userId,
+      ],
       readBy: [
         {
           user: userId,
@@ -795,7 +941,10 @@ async function getConversationMessages(
 
   const safeLimit =
     Math.min(
-      Math.max(Number(limit) || 50, 1),
+      Math.max(
+        Number(limit) || 50,
+        1
+      ),
       100
     );
 
@@ -963,7 +1112,10 @@ async function getNotifications(
 ) {
   const safeLimit =
     Math.min(
-      Math.max(Number(limit) || 30, 1),
+      Math.max(
+        Number(limit) || 30,
+        1
+      ),
       100
     );
 
@@ -1064,7 +1216,10 @@ async function createGroup(
   }
 
   const allowedPrivacy =
-    ['private', 'public'];
+    [
+      'private',
+      'public',
+    ];
 
   if (
     !allowedPrivacy.includes(
@@ -1084,7 +1239,9 @@ async function createGroup(
         [
           userId,
           ...memberIds,
-        ].map(String)
+        ].map(
+          String
+        )
       ),
     ];
 
@@ -1094,15 +1251,18 @@ async function createGroup(
       description: cleanDescription,
       privacy,
       owner: userId,
+
       members:
         uniqueMembers.map(
           memberId => ({
             user: memberId,
+
             role:
               String(memberId) ===
               String(userId)
                 ? 'owner'
                 : 'member',
+
             joinedAt:
               new Date(),
           })
@@ -1118,7 +1278,20 @@ async function createGroup(
 ============================================================ */
 
 module.exports = {
+
+  /* DATABASE */
+
+  connectDatabase,
+  disconnectDatabase,
+  isDatabaseReady,
+
+
+  /* ERROR */
+
   AppError,
+
+
+  /* UTILITIES */
 
   normalizeEmail,
   normalizeUsername,
@@ -1131,25 +1304,46 @@ module.exports = {
   sanitizeUser,
   getPublicUser,
 
+
+  /* AUTHENTICATION */
+
   registerUser,
   loginUser,
   getCurrentUser,
+
+
+  /* USER PROFILE */
 
   getUserByUsername,
   searchUsers,
   updateProfile,
 
+
+  /* CONVERSATIONS */
+
   getOrCreateDirectConversation,
   getUserConversations,
+
+
+  /* MESSAGES */
 
   sendMessage,
   getConversationMessages,
 
+
+  /* CONNECTIONS */
+
   sendConnectionRequest,
   acceptConnectionRequest,
 
+
+  /* NOTIFICATIONS */
+
   getNotifications,
   markNotificationAsRead,
+
+
+  /* GROUPS */
 
   createGroup,
 };
