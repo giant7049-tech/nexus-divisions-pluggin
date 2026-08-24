@@ -34,12 +34,12 @@
 const express = require('express');
 const path = require('path');
 
-const {
-    APP_NAME,
-    NODE_ENV,
-    PUBLIC_DIR,
-    API_PREFIX
-} = require('./config');
+const config = require('./config');
+
+const APP_NAME = config.app.name;
+const NODE_ENV = config.app.environment;
+const PUBLIC_DIR = config.frontend.publicDirectory;
+const API_PREFIX = config.api.prefix;
 
 const {
     securityMiddleware,
