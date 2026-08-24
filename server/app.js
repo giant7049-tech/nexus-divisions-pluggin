@@ -69,9 +69,7 @@ const {
  * ================================================================
  */
 
-const {
-    router: apiRouter
-} = require('./routes');
+const apiRouter = require('./routes');;
 
 
 /**
