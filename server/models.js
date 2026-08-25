@@ -1,1808 +1,1889 @@
-'use strict';
+/* ========================================================================
+   NEXUS CONNECT 2030
+   Nexus Buildsolutions Limited
 
-/**
- * ================================================================
- * NEXUS CONNECT — DATABASE MODELS
- * ================================================================
- *
- * Architecture:
- *   Node.js + Express + MongoDB + Mongoose + Socket.IO
- *
- * Purpose:
- *   Centralized, production-grade MongoDB schemas for Nexus Connect.
- *
- * Design principles:
- *   - Secure-by-default
- *   - Scalable indexes
- *   - No plaintext PIN storage
- *   - Username-based public identity
- *   - UUID-style public identifiers
- *   - Soft deletion where appropriate
- *   - Audit-friendly timestamps
- *   - Phase-ready architecture
- *   - Mobile-first application support
- *   - Future AI / business / community support
- *
- * IMPORTANT:
- *   Authentication secrets must be hashed by the service layer.
- *   This file NEVER stores a raw PIN.
- *
- * ================================================================
- */
+   MODEL LAYER
+   ------------------------------------------------------------------------
+   Responsibilities:
+   - Application data models
+   - Professional identity
+   - Business identity
+   - Service models
+   - Project models
+   - Search result models
+   - Request models
+   - Notification models
+   - Verification models
+   - Data normalization
+   - Model factories
+   - Model serialization
+   ======================================================================== */
 
-const mongoose = require('mongoose');
-const crypto = require('crypto');
+"use strict";
 
-const { Schema } = mongoose;
 
-/* ================================================================
- * GLOBAL HELPERS
- * ================================================================ */
+/* ========================================================================
+   01. MODEL NAMESPACE
+   ======================================================================== */
 
-/**
- * Generates a cryptographically strong public identifier.
- *
- * MongoDB's internal _id remains private.
- * Public application references should use publicId.
- */
-function generatePublicId(prefix) {
-    return `${prefix}_${crypto.randomBytes(16).toString('hex')}`;
-}
+const NexusModel = {};
 
-/**
- * Normalize email addresses.
- */
-function normalizeEmail(value) {
-    if (!value) return value;
-    return value.trim().toLowerCase();
-}
 
-/**
- * Normalize usernames.
- */
-function normalizeUsername(value) {
-    if (!value) return value;
+/* ========================================================================
+   02. MODEL ENUMERATIONS
+   ======================================================================== */
 
-    return value
-        .trim()
-        .toLowerCase()
-        .replace(/^@/, '');
-}
+NexusModel.Enums = {
 
-/**
- * Common schema options.
- */
-const commonSchemaOptions = {
-    timestamps: true,
-    versionKey: false,
-    minimize: true,
-    strict: true
+    UserRole: Object.freeze({
+
+        VISITOR:
+            "visitor",
+
+        PROFESSIONAL:
+            "professional",
+
+        BUSINESS:
+            "business",
+
+        ADMINISTRATOR:
+            "administrator"
+
+    }),
+
+
+    VerificationStatus: Object.freeze({
+
+        UNVERIFIED:
+            "unverified",
+
+        PENDING:
+            "pending",
+
+        VERIFIED:
+            "verified",
+
+        CERTIFIED:
+            "certified",
+
+        SUSPENDED:
+            "suspended"
+
+    }),
+
+
+    RequestStatus: Object.freeze({
+
+        DRAFT:
+            "draft",
+
+        PENDING:
+            "pending",
+
+        MATCHING:
+            "matching",
+
+        MATCHED:
+            "matched",
+
+        ACCEPTED:
+            "accepted",
+
+        IN_PROGRESS:
+            "in-progress",
+
+        COMPLETED:
+            "completed",
+
+        CANCELLED:
+            "cancelled"
+
+    }),
+
+
+    RequestPriority: Object.freeze({
+
+        STANDARD:
+            "standard",
+
+        URGENT:
+            "urgent",
+
+        EMERGENCY:
+            "emergency"
+
+    }),
+
+
+    SearchType: Object.freeze({
+
+        ALL:
+            "all",
+
+        PROFESSIONAL:
+            "professional",
+
+        BUSINESS:
+            "business",
+
+        SERVICE:
+            "service",
+
+        PROJECT:
+            "project",
+
+        LOCATION:
+            "location"
+
+    }),
+
+
+    NotificationType: Object.freeze({
+
+        SYSTEM:
+            "system",
+
+        REQUEST:
+            "request",
+
+        VERIFICATION:
+            "verification",
+
+        MESSAGE:
+            "message",
+
+        PROJECT:
+            "project",
+
+        SECURITY:
+            "security"
+
+    })
+
 };
 
 
-/* ================================================================
- * 1. USER
- * ================================================================
- *
- * Represents a Nexus Connect account.
- *
- * Authentication:
- *   email + username + 4-digit PIN
- *
- * Public identity:
- *   @username
- *
- * IMPORTANT:
- *   pinHash is NEVER exposed through normal queries.
- * ================================================================ */
+/* ========================================================================
+   03. UTILITY FUNCTIONS
+   ======================================================================== */
 
-const userSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('usr')
-        },
+NexusModel.Utils = {
 
-        email: {
-            type: String,
-            required: true,
-            unique: true,
-            index: true,
-            lowercase: true,
-            trim: true,
-            maxlength: 254
-        },
+    id(prefix = "nexus") {
 
-        username: {
-            type: String,
-            required: true,
-            unique: true,
-            index: true,
-            lowercase: true,
-            trim: true,
-            minlength: 3,
-            maxlength: 30,
-            match: /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/
-        },
+        const timestamp =
+            Date.now().toString(36);
 
-        displayName: {
-            type: String,
-            required: true,
-            trim: true,
-            minlength: 1,
-            maxlength: 80
-        },
+        const random =
+            Math.random()
+                .toString(36)
+                .substring(2, 9);
 
-        bio: {
-            type: String,
-            default: '',
-            trim: true,
-            maxlength: 500
-        },
-
-        profilePhoto: {
-            type: String,
-            default: null,
-            trim: true
-        },
-
-        coverPhoto: {
-            type: String,
-            default: null,
-            trim: true
-        },
-
-        pinHash: {
-            type: String,
-            required: true,
-            select: false
-        },
-
-        role: {
-            type: String,
-            enum: [
-                'user',
-                'business',
-                'moderator',
-                'admin',
-                'superadmin'
-            ],
-            default: 'user',
-            index: true
-        },
-
-        accountStatus: {
-            type: String,
-            enum: [
-                'pending',
-                'active',
-                'suspended',
-                'disabled',
-                'deleted'
-            ],
-            default: 'active',
-            index: true
-        },
-
-        emailVerified: {
-            type: Boolean,
-            default: false
-        },
-
-        presence: {
-            status: {
-                type: String,
-                enum: [
-                    'online',
-                    'away',
-                    'dnd',
-                    'offline'
-                ],
-                default: 'offline'
-            },
-
-            customStatus: {
-                type: String,
-                default: '',
-                maxlength: 100
-            },
-
-            lastSeenAt: {
-                type: Date,
-                default: null
-            }
-        },
-
-        privacy: {
-            whoCanMessage: {
-                type: String,
-                enum: [
-                    'everyone',
-                    'connections',
-                    'nobody'
-                ],
-                default: 'everyone'
-            },
-
-            whoCanSeeOnlineStatus: {
-                type: String,
-                enum: [
-                    'everyone',
-                    'connections',
-                    'nobody'
-                ],
-                default: 'everyone'
-            },
-
-            whoCanSeeProfile: {
-                type: String,
-                enum: [
-                    'everyone',
-                    'connections',
-                    'nobody'
-                ],
-                default: 'everyone'
-            },
-
-            whoCanAddToGroups: {
-                type: String,
-                enum: [
-                    'everyone',
-                    'connections',
-                    'nobody'
-                ],
-                default: 'connections'
-            },
-
-            whoCanSendInvitations: {
-                type: String,
-                enum: [
-                    'everyone',
-                    'connections',
-                    'nobody'
-                ],
-                default: 'everyone'
-            }
-        },
-
-        security: {
-            failedPinAttempts: {
-                type: Number,
-                default: 0,
-                min: 0
-            },
-
-            lockedUntil: {
-                type: Date,
-                default: null
-            },
-
-            lastLoginAt: {
-                type: Date,
-                default: null
-            },
-
-            lastLoginIpHash: {
-                type: String,
-                default: null,
-                select: false
-            }
-        },
-
-        preferences: {
-            theme: {
-                type: String,
-                enum: [
-                    'light',
-                    'dark',
-                    'system'
-                ],
-                default: 'system'
-            },
-
-            language: {
-                type: String,
-                default: 'en',
-                maxlength: 10
-            },
-
-            notificationsEnabled: {
-                type: Boolean,
-                default: true
-            }
-        },
-
-        deletedAt: {
-            type: Date,
-            default: null,
-            index: true
-        }
+        return `${prefix}-${timestamp}-${random}`;
     },
-    commonSchemaOptions
-);
 
 
-/* ================================================================
- * USER INDEXES
- * ================================================================ */
+    now() {
 
-userSchema.index({
-    username: 1
-});
+        return new Date().toISOString();
 
-userSchema.index({
-    email: 1
-});
-
-userSchema.index({
-    accountStatus: 1,
-    createdAt: -1
-});
-
-userSchema.index({
-    'presence.status': 1,
-    'presence.lastSeenAt': -1
-});
-
-
-/* ================================================================
- * 2. SESSION
- * ================================================================
- *
- * Persistent authentication sessions.
- *
- * The client receives a secure session token.
- * Only a hash of that token should be stored here.
- * ================================================================ */
-
-const sessionSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('ses')
-        },
-
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        tokenHash: {
-            type: String,
-            required: true,
-            unique: true,
-            select: false
-        },
-
-        deviceName: {
-            type: String,
-            default: 'Unknown device',
-            maxlength: 120
-        },
-
-        platform: {
-            type: String,
-            default: 'unknown',
-            maxlength: 50
-        },
-
-        browser: {
-            type: String,
-            default: 'unknown',
-            maxlength: 100
-        },
-
-        ipHash: {
-            type: String,
-            default: null,
-            select: false
-        },
-
-        userAgentHash: {
-            type: String,
-            default: null,
-            select: false
-        },
-
-        lastActiveAt: {
-            type: Date,
-            default: Date.now,
-            index: true
-        },
-
-        expiresAt: {
-            type: Date,
-            required: true,
-            index: true
-        },
-
-        revokedAt: {
-            type: Date,
-            default: null,
-            index: true
-        }
     },
-    commonSchemaOptions
-);
-
-sessionSchema.index({
-    expiresAt: 1
-}, {
-    expireAfterSeconds: 0
-});
-
-sessionSchema.index({
-    userId: 1,
-    revokedAt: 1,
-    expiresAt: 1
-});
 
 
-/* ================================================================
- * 3. CONNECTION
- * ================================================================
- *
- * Social graph between users.
- *
- * Status:
- *   pending
- *   accepted
- *   declined
- *   blocked
- * ================================================================ */
+    string(value, fallback = "") {
 
-const connectionSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('con')
-        },
+        if (
+            value === null ||
+            value === undefined
+        ) {
 
-        requesterId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        recipientId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        status: {
-            type: String,
-            enum: [
-                'pending',
-                'accepted',
-                'declined',
-                'blocked'
-            ],
-            default: 'pending',
-            index: true
-        },
-
-        respondedAt: {
-            type: Date,
-            default: null
-        },
-
-        blockedBy: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            default: null
+            return fallback;
         }
+
+        return String(value).trim();
+
     },
-    commonSchemaOptions
-);
-
-connectionSchema.index({
-    requesterId: 1,
-    recipientId: 1
-}, {
-    unique: true
-});
-
-connectionSchema.index({
-    recipientId: 1,
-    status: 1,
-    createdAt: -1
-});
-
-connectionSchema.index({
-    requesterId: 1,
-    status: 1,
-    createdAt: -1
-});
 
 
-/* ================================================================
- * 4. CONVERSATION
- * ================================================================
- *
- * Supports:
- *   - private conversations
- *   - groups
- *   - future community conversations
- * ================================================================ */
+    number(value, fallback = 0) {
 
-const conversationSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('cv')
-        },
+        const number =
+            Number(value);
 
-        type: {
-            type: String,
-            enum: [
-                'direct',
-                'group',
-                'community'
-            ],
-            default: 'direct',
-            index: true
-        },
+        return Number.isFinite(number)
+            ? number
+            : fallback;
 
-        name: {
-            type: String,
-            default: '',
-            trim: true,
-            maxlength: 120
-        },
+    },
 
-        description: {
-            type: String,
-            default: '',
-            trim: true,
-            maxlength: 500
-        },
 
-        avatar: {
-            type: String,
-            default: null
-        },
+    array(value) {
 
-        ownerId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            default: null,
-            index: true
-        },
+        return Array.isArray(value)
+            ? value
+            : [];
 
-        lastMessageId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Message',
-            default: null
-        },
+    },
 
-        lastActivityAt: {
-            type: Date,
-            default: Date.now,
-            index: true
-        },
 
-        archived: {
-            type: Boolean,
-            default: false
-        },
+    object(value) {
 
-        deletedAt: {
-            type: Date,
-            default: null
+        return (
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value)
+        )
+            ? value
+            : {};
+
+    },
+
+
+    boolean(value, fallback = false) {
+
+        if (
+            value === true ||
+            value === false
+        ) {
+
+            return value;
         }
+
+        return fallback;
+
     },
-    commonSchemaOptions
-);
-
-conversationSchema.index({
-    lastActivityAt: -1
-});
-
-conversationSchema.index({
-    ownerId: 1,
-    lastActivityAt: -1
-});
 
 
-/* ================================================================
- * 5. CONVERSATION MEMBER
- * ================================================================
- *
- * Separate membership collection allows conversations to scale
- * without placing unlimited members inside one document.
- * ================================================================ */
+    normalizeText(value) {
 
-const conversationMemberSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('mem')
-        },
+        return this.string(value)
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .trim();
 
-        conversationId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Conversation',
-            required: true,
-            index: true
-        },
+    },
 
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
 
-        role: {
-            type: String,
-            enum: [
-                'member',
-                'moderator',
-                'admin',
-                'owner'
-            ],
-            default: 'member'
-        },
+    initials(name) {
 
-        joinedAt: {
-            type: Date,
-            default: Date.now
-        },
+        return this.string(name)
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map(
+                part =>
+                    part
+                        .charAt(0)
+                        .toUpperCase()
+            )
+            .join("");
 
-        leftAt: {
-            type: Date,
-            default: null
-        },
+    },
 
-        mutedUntil: {
-            type: Date,
-            default: null
-        },
 
-        lastReadMessageId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Message',
-            default: null
-        },
+    clone(value) {
 
-        unreadCount: {
-            type: Number,
-            default: 0,
-            min: 0
+        if (
+            value === null ||
+            value === undefined
+        ) {
+
+            return value;
         }
-    },
-    commonSchemaOptions
-);
 
-conversationMemberSchema.index({
-    conversationId: 1,
-    userId: 1
-}, {
-    unique: true
-});
+        return JSON.parse(
+            JSON.stringify(value)
+        );
 
-conversationMemberSchema.index({
-    userId: 1,
-    joinedAt: -1
-});
-
-
-/* ================================================================
- * 6. MESSAGE
- * ================================================================
- *
- * Core communication object.
- *
- * Supports:
- *   text
- *   image
- *   video
- *   audio
- *   document
- *   link
- *   system
- *
- * Future:
- *   AI-generated suggestions
- *   translation
- *   message actions
- * ================================================================ */
-
-const messageSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('msg')
-        },
-
-        conversationId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Conversation',
-            required: true,
-            index: true
-        },
-
-        senderId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        type: {
-            type: String,
-            enum: [
-                'text',
-                'image',
-                'video',
-                'audio',
-                'document',
-                'link',
-                'system'
-            ],
-            default: 'text',
-            index: true
-        },
-
-        text: {
-            type: String,
-            default: '',
-            maxlength: 10000
-        },
-
-        replyToMessageId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Message',
-            default: null
-        },
-
-        forwardedFromMessageId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Message',
-            default: null
-        },
-
-        attachmentIds: [{
-            type: Schema.Types.ObjectId,
-            ref: 'Media'
-        }],
-
-        mentions: [{
-            type: Schema.Types.ObjectId,
-            ref: 'User'
-        }],
-
-        reactions: [{
-            userId: {
-                type: Schema.Types.ObjectId,
-                ref: 'User',
-                required: true
-            },
-
-            emoji: {
-                type: String,
-                required: true,
-                maxlength: 20
-            },
-
-            reactedAt: {
-                type: Date,
-                default: Date.now
-            }
-        }],
-
-        status: {
-            type: String,
-            enum: [
-                'sent',
-                'delivered',
-                'read',
-                'failed'
-            ],
-            default: 'sent',
-            index: true
-        },
-
-        editedAt: {
-            type: Date,
-            default: null
-        },
-
-        deletedAt: {
-            type: Date,
-            default: null
-        },
-
-        pinned: {
-            type: Boolean,
-            default: false,
-            index: true
-        },
-
-        savedBy: [{
-            type: Schema.Types.ObjectId,
-            ref: 'User'
-        }]
-    },
-    commonSchemaOptions
-);
-
-messageSchema.index({
-    conversationId: 1,
-    createdAt: -1
-});
-
-messageSchema.index({
-    senderId: 1,
-    createdAt: -1
-});
-
-messageSchema.index({
-    conversationId: 1,
-    pinned: 1,
-    createdAt: -1
-});
-
-
-/* ================================================================
- * 7. MEDIA
- * ================================================================
- *
- * Metadata only.
- *
- * Actual files should live in a proper object/media service
- * such as Cloudinary or another storage provider.
- *
- * MongoDB stores metadata and ownership.
- * ================================================================ */
-
-const mediaSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('med')
-        },
-
-        ownerId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        type: {
-            type: String,
-            enum: [
-                'image',
-                'video',
-                'audio',
-                'document',
-                'other'
-            ],
-            required: true,
-            index: true
-        },
-
-        originalName: {
-            type: String,
-            default: '',
-            maxlength: 255
-        },
-
-        mimeType: {
-            type: String,
-            default: '',
-            maxlength: 120
-        },
-
-        size: {
-            type: Number,
-            default: 0,
-            min: 0
-        },
-
-        url: {
-            type: String,
-            required: true
-        },
-
-        thumbnailUrl: {
-            type: String,
-            default: null
-        },
-
-        storageProvider: {
-            type: String,
-            default: 'cloudinary'
-        },
-
-        storageKey: {
-            type: String,
-            default: null
-        },
-
-        duration: {
-            type: Number,
-            default: null,
-            min: 0
-        },
-
-        deletedAt: {
-            type: Date,
-            default: null
-        }
-    },
-    commonSchemaOptions
-);
-
-mediaSchema.index({
-    ownerId: 1,
-    createdAt: -1
-});
-
-mediaSchema.index({
-    type: 1,
-    createdAt: -1
-});
-
-
-/* ================================================================
- * 8. GROUP
- * ================================================================
- *
- * Group-level metadata.
- *
- * Membership is handled through ConversationMember.
- * ================================================================ */
-
-const groupSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('grp')
-        },
-
-        conversationId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Conversation',
-            required: true,
-            unique: true,
-            index: true
-        },
-
-        name: {
-            type: String,
-            required: true,
-            trim: true,
-            minlength: 1,
-            maxlength: 120
-        },
-
-        description: {
-            type: String,
-            default: '',
-            maxlength: 500
-        },
-
-        privacy: {
-            type: String,
-            enum: [
-                'private',
-                'public'
-            ],
-            default: 'private',
-            index: true
-        },
-
-        createdBy: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        }
-    },
-    commonSchemaOptions
-);
-
-
-/* ================================================================
- * 9. COMMUNITY
- * ================================================================
- *
- * Larger structured spaces.
- *
- * Example:
- *
- * Nexus Business Network
- *   ├── General
- *   ├── Announcements
- *   ├── Marketing
- *   ├── Opportunities
- *   ├── Questions
- *   └── Resources
- * ================================================================ */
-
-const communitySchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('com')
-        },
-
-        name: {
-            type: String,
-            required: true,
-            trim: true,
-            maxlength: 150
-        },
-
-        description: {
-            type: String,
-            default: '',
-            maxlength: 1000
-        },
-
-        avatar: {
-            type: String,
-            default: null
-        },
-
-        ownerId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        privacy: {
-            type: String,
-            enum: [
-                'private',
-                'public'
-            ],
-            default: 'public',
-            index: true
-        },
-
-        verified: {
-            type: Boolean,
-            default: false
-        },
-
-        deletedAt: {
-            type: Date,
-            default: null
-        }
-    },
-    commonSchemaOptions
-);
-
-communitySchema.index({
-    privacy: 1,
-    createdAt: -1
-});
-
-
-/* ================================================================
- * 10. COMMUNITY MEMBER
- * ================================================================ */
-
-const communityMemberSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('cmb')
-        },
-
-        communityId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Community',
-            required: true,
-            index: true
-        },
-
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        role: {
-            type: String,
-            enum: [
-                'member',
-                'moderator',
-                'admin',
-                'owner'
-            ],
-            default: 'member'
-        },
-
-        joinedAt: {
-            type: Date,
-            default: Date.now
-        }
-    },
-    commonSchemaOptions
-);
-
-communityMemberSchema.index({
-    communityId: 1,
-    userId: 1
-}, {
-    unique: true
-});
-
-
-/* ================================================================
- * 11. NOTIFICATION
- * ================================================================ */
-
-const notificationSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('not')
-        },
-
-        recipientId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        actorId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            default: null
-        },
-
-        type: {
-            type: String,
-            enum: [
-                'message',
-                'connection_request',
-                'connection_accepted',
-                'reaction',
-                'mention',
-                'group_invitation',
-                'community_invitation',
-                'system'
-            ],
-            required: true,
-            index: true
-        },
-
-        title: {
-            type: String,
-            required: true,
-            maxlength: 200
-        },
-
-        body: {
-            type: String,
-            default: '',
-            maxlength: 500
-        },
-
-        entityType: {
-            type: String,
-            default: null
-        },
-
-        entityId: {
-            type: Schema.Types.ObjectId,
-            default: null
-        },
-
-        readAt: {
-            type: Date,
-            default: null,
-            index: true
-        }
-    },
-    commonSchemaOptions
-);
-
-notificationSchema.index({
-    recipientId: 1,
-    readAt: 1,
-    createdAt: -1
-});
-
-
-/* ================================================================
- * 12. ACTIVITY
- * ================================================================
- *
- * Separate from notifications.
- *
- * Activity answers:
- * "What has happened in my network?"
- * ================================================================ */
-
-const activitySchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('act')
-        },
-
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        type: {
-            type: String,
-            enum: [
-                'message_sent',
-                'connection_created',
-                'group_joined',
-                'group_created',
-                'file_shared',
-                'community_joined',
-                'profile_updated',
-                'status_updated',
-                'system'
-            ],
-            required: true,
-            index: true
-        },
-
-        entityType: {
-            type: String,
-            default: null
-        },
-
-        entityId: {
-            type: Schema.Types.ObjectId,
-            default: null
-        },
-
-        metadata: {
-            type: Schema.Types.Mixed,
-            default: {}
-        }
-    },
-    commonSchemaOptions
-);
-
-activitySchema.index({
-    userId: 1,
-    createdAt: -1
-});
-
-
-/* ================================================================
- * 13. SAVED ITEM
- * ================================================================
- *
- * Allows users to save:
- *   messages
- *   files
- *   links
- *   media
- *   notes
- * ================================================================ */
-
-const savedItemSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('sav')
-        },
-
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        itemType: {
-            type: String,
-            enum: [
-                'message',
-                'media',
-                'link',
-                'note'
-            ],
-            required: true,
-            index: true
-        },
-
-        itemId: {
-            type: Schema.Types.ObjectId,
-            required: true,
-            index: true
-        },
-
-        note: {
-            type: String,
-            default: '',
-            maxlength: 500
-        }
-    },
-    commonSchemaOptions
-);
-
-savedItemSchema.index({
-    userId: 1,
-    itemType: 1,
-    itemId: 1
-}, {
-    unique: true
-});
-
-
-/* ================================================================
- * 14. INVITATION
- * ================================================================
- *
- * Used for:
- *   user invitations
- *   group invitations
- *   community invitations
- *
- * Public URLs can eventually look like:
- *
- * /connect/invite/xxxxxxxx
- * ================================================================ */
-
-const invitationSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('inv')
-        },
-
-        tokenHash: {
-            type: String,
-            required: true,
-            unique: true,
-            select: false
-        },
-
-        createdBy: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        targetType: {
-            type: String,
-            enum: [
-                'user',
-                'group',
-                'community'
-            ],
-            required: true
-        },
-
-        targetId: {
-            type: Schema.Types.ObjectId,
-            required: true,
-            index: true
-        },
-
-        maxUses: {
-            type: Number,
-            default: null,
-            min: 1
-        },
-
-        uses: {
-            type: Number,
-            default: 0,
-            min: 0
-        },
-
-        expiresAt: {
-            type: Date,
-            default: null,
-            index: true
-        },
-
-        revokedAt: {
-            type: Date,
-            default: null,
-            index: true
-        }
-    },
-    commonSchemaOptions
-);
-
-invitationSchema.index({
-    expiresAt: 1
-}, {
-    expireAfterSeconds: 0,
-    partialFilterExpression: {
-        expiresAt: {
-            $type: 'date'
-        }
     }
-});
 
-
-/* ================================================================
- * 15. USER STATUS
- * ================================================================
- *
- * Optional story/status system.
- *
- * Designed for future 24-hour status functionality.
- * ================================================================ */
-
-const userStatusSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('sts')
-        },
-
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        type: {
-            type: String,
-            enum: [
-                'text',
-                'image',
-                'video'
-            ],
-            required: true
-        },
-
-        text: {
-            type: String,
-            default: '',
-            maxlength: 500
-        },
-
-        mediaId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Media',
-            default: null
-        },
-
-        expiresAt: {
-            type: Date,
-            required: true,
-            index: true
-        }
-    },
-    commonSchemaOptions
-);
-
-userStatusSchema.index({
-    expiresAt: 1
-}, {
-    expireAfterSeconds: 0
-});
-
-userStatusSchema.index({
-    userId: 1,
-    createdAt: -1
-});
-
-
-/* ================================================================
- * 16. BLOCKED USER
- * ================================================================ */
-
-const blockedUserSchema = new Schema(
-    {
-        blockerId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        blockedId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        }
-    },
-    commonSchemaOptions
-);
-
-blockedUserSchema.index({
-    blockerId: 1,
-    blockedId: 1
-}, {
-    unique: true
-});
-
-
-/* ================================================================
- * 17. DEVICE
- * ================================================================
- *
- * Used by Security Center.
- *
- * Examples:
- *   Chrome — Windows
- *   Android
- *   iPhone
- * ================================================================ */
-
-const deviceSchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('dev')
-        },
-
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        deviceName: {
-            type: String,
-            default: 'Unknown device',
-            maxlength: 120
-        },
-
-        platform: {
-            type: String,
-            default: 'unknown',
-            maxlength: 50
-        },
-
-        browser: {
-            type: String,
-            default: 'unknown',
-            maxlength: 100
-        },
-
-        lastActiveAt: {
-            type: Date,
-            default: Date.now,
-            index: true
-        },
-
-        firstSeenAt: {
-            type: Date,
-            default: Date.now
-        },
-
-        trusted: {
-            type: Boolean,
-            default: false
-        },
-
-        revokedAt: {
-            type: Date,
-            default: null
-        }
-    },
-    commonSchemaOptions
-);
-
-deviceSchema.index({
-    userId: 1,
-    lastActiveAt: -1
-});
-
-
-/* ================================================================
- * 18. AI CONVERSATION MEMORY
- * ================================================================
- *
- * Future-ready structure for Nexus AI.
- *
- * We intentionally keep AI data separate from normal messages.
- * This allows AI features to evolve without corrupting the
- * communication model.
- * ================================================================ */
-
-const aiMemorySchema = new Schema(
-    {
-        publicId: {
-            type: String,
-            unique: true,
-            index: true,
-            default: () => generatePublicId('aim')
-        },
-
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'User',
-            required: true,
-            index: true
-        },
-
-        conversationId: {
-            type: Schema.Types.ObjectId,
-            ref: 'Conversation',
-            default: null,
-            index: true
-        },
-
-        type: {
-            type: String,
-            enum: [
-                'summary',
-                'preference',
-                'task',
-                'context'
-            ],
-            required: true
-        },
-
-        content: {
-            type: String,
-            required: true,
-            maxlength: 10000
-        },
-
-        expiresAt: {
-            type: Date,
-            default: null,
-            index: true
-        }
-    },
-    commonSchemaOptions
-);
-
-aiMemorySchema.index({
-    userId: 1,
-    conversationId: 1,
-    createdAt: -1
-});
-
-
-/* ================================================================
- * MODEL REGISTRATION
- * ================================================================ */
-
-const User =
-    mongoose.models.User ||
-    mongoose.model('User', userSchema);
-
-const Session =
-    mongoose.models.Session ||
-    mongoose.model('Session', sessionSchema);
-
-const Connection =
-    mongoose.models.Connection ||
-    mongoose.model('Connection', connectionSchema);
-
-const Conversation =
-    mongoose.models.Conversation ||
-    mongoose.model('Conversation', conversationSchema);
-
-const ConversationMember =
-    mongoose.models.ConversationMember ||
-    mongoose.model('ConversationMember', conversationMemberSchema);
-
-const Message =
-    mongoose.models.Message ||
-    mongoose.model('Message', messageSchema);
-
-const Media =
-    mongoose.models.Media ||
-    mongoose.model('Media', mediaSchema);
-
-const Group =
-    mongoose.models.Group ||
-    mongoose.model('Group', groupSchema);
-
-const Community =
-    mongoose.models.Community ||
-    mongoose.model('Community', communitySchema);
-
-const CommunityMember =
-    mongoose.models.CommunityMember ||
-    mongoose.model('CommunityMember', communityMemberSchema);
-
-const Notification =
-    mongoose.models.Notification ||
-    mongoose.model('Notification', notificationSchema);
-
-const Activity =
-    mongoose.models.Activity ||
-    mongoose.model('Activity', activitySchema);
-
-const SavedItem =
-    mongoose.models.SavedItem ||
-    mongoose.model('SavedItem', savedItemSchema);
-
-const Invitation =
-    mongoose.models.Invitation ||
-    mongoose.model('Invitation', invitationSchema);
-
-const UserStatus =
-    mongoose.models.UserStatus ||
-    mongoose.model('UserStatus', userStatusSchema);
-
-const BlockedUser =
-    mongoose.models.BlockedUser ||
-    mongoose.model('BlockedUser', blockedUserSchema);
-
-const Device =
-    mongoose.models.Device ||
-    mongoose.model('Device', deviceSchema);
-
-const AiMemory =
-    mongoose.models.AiMemory ||
-    mongoose.model('AiMemory', aiMemorySchema);
-
-
-/* ================================================================
- * EXPORTS
- * ================================================================ */
-
-module.exports = {
-    User,
-    Session,
-    Connection,
-    Conversation,
-    ConversationMember,
-    Message,
-    Media,
-    Group,
-    Community,
-    CommunityMember,
-    Notification,
-    Activity,
-    SavedItem,
-    Invitation,
-    UserStatus,
-    BlockedUser,
-    Device,
-    AiMemory
 };
+
+
+/* ========================================================================
+   04. BASE MODEL
+   ======================================================================== */
+
+class NexusBaseModel {
+
+    constructor(data = {}) {
+
+        this.id =
+            NexusModel.Utils.string(
+                data.id,
+                NexusModel.Utils.id("record")
+            );
+
+        this.createdAt =
+            NexusModel.Utils.string(
+                data.createdAt,
+                NexusModel.Utils.now()
+            );
+
+        this.updatedAt =
+            NexusModel.Utils.string(
+                data.updatedAt,
+                NexusModel.Utils.now()
+            );
+
+    }
+
+
+    touch() {
+
+        this.updatedAt =
+            NexusModel.Utils.now();
+
+        return this;
+
+    }
+
+
+    toJSON() {
+
+        return {
+            ...this
+        };
+
+    }
+
+
+    clone() {
+
+        return NexusModel.Utils.clone(
+            this.toJSON()
+        );
+
+    }
+
+}
+
+
+/* ========================================================================
+   05. LOCATION MODEL
+   ======================================================================== */
+
+class NexusLocation extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.country =
+            NexusModel.Utils.string(
+                data.country,
+                "Nigeria"
+            );
+
+        this.state =
+            NexusModel.Utils.string(
+                data.state
+            );
+
+        this.city =
+            NexusModel.Utils.string(
+                data.city
+            );
+
+        this.area =
+            NexusModel.Utils.string(
+                data.area
+            );
+
+        this.address =
+            NexusModel.Utils.string(
+                data.address
+            );
+
+        this.latitude =
+            data.latitude !== undefined
+                ? NexusModel.Utils.number(
+                    data.latitude,
+                    null
+                )
+                : null;
+
+        this.longitude =
+            data.longitude !== undefined
+                ? NexusModel.Utils.number(
+                    data.longitude,
+                    null
+                )
+                : null;
+
+    }
+
+
+    get displayName() {
+
+        return [
+            this.city,
+            this.state,
+            this.country
+        ]
+            .filter(Boolean)
+            .join(", ");
+
+    }
+
+}
+
+
+/* ========================================================================
+   06. VERIFICATION MODEL
+   ======================================================================== */
+
+class NexusVerification {
+
+    constructor(data = {}) {
+
+        this.status =
+            NexusModel.Utils.string(
+                data.status,
+                NexusModel.Enums.VerificationStatus.UNVERIFIED
+            );
+
+        this.verified =
+            this.status ===
+            NexusModel.Enums.VerificationStatus.VERIFIED ||
+            this.status ===
+            NexusModel.Enums.VerificationStatus.CERTIFIED;
+
+        this.level =
+            NexusModel.Utils.string(
+                data.level,
+                this.verified
+                    ? "standard"
+                    : "none"
+            );
+
+        this.verifiedAt =
+            NexusModel.Utils.string(
+                data.verifiedAt
+            );
+
+        this.verifiedBy =
+            NexusModel.Utils.string(
+                data.verifiedBy
+            );
+
+        this.documents =
+            NexusModel.Utils.array(
+                data.documents
+            );
+
+        this.notes =
+            NexusModel.Utils.string(
+                data.notes
+            );
+
+    }
+
+}
+
+
+/* ========================================================================
+   07. PROFESSIONAL MODEL
+   ======================================================================== */
+
+class NexusProfessional extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            "professional";
+
+        this.name =
+            NexusModel.Utils.string(
+                data.name,
+                "Nexus Professional"
+            );
+
+        this.firstName =
+            NexusModel.Utils.string(
+                data.firstName
+            );
+
+        this.lastName =
+            NexusModel.Utils.string(
+                data.lastName
+            );
+
+        this.title =
+            NexusModel.Utils.string(
+                data.title,
+                "Professional"
+            );
+
+        this.role =
+            NexusModel.Utils.string(
+                data.role,
+                "Professional Services"
+            );
+
+        this.category =
+            NexusModel.Utils.string(
+                data.category,
+                "General Professional Services"
+            );
+
+        this.company =
+            NexusModel.Utils.string(
+                data.company
+            );
+
+        this.bio =
+            NexusModel.Utils.string(
+                data.bio
+            );
+
+        this.email =
+            NexusModel.Utils.string(
+                data.email
+            );
+
+        this.phone =
+            NexusModel.Utils.string(
+                data.phone
+            );
+
+        this.avatar =
+            NexusModel.Utils.string(
+                data.avatar
+            );
+
+        this.location =
+            new NexusLocation(
+                data.location || {}
+            );
+
+        this.verification =
+            new NexusVerification(
+                data.verification || {}
+            );
+
+        this.services =
+            NexusModel.Utils.array(
+                data.services
+            );
+
+        this.skills =
+            NexusModel.Utils.array(
+                data.skills
+            );
+
+        this.certifications =
+            NexusModel.Utils.array(
+                data.certifications
+            );
+
+        this.projects =
+            NexusModel.Utils.array(
+                data.projects
+            );
+
+        this.yearsExperience =
+            NexusModel.Utils.number(
+                data.yearsExperience
+            );
+
+        this.rating =
+            NexusModel.Utils.number(
+                data.rating
+            );
+
+        this.reviewCount =
+            NexusModel.Utils.number(
+                data.reviewCount
+            );
+
+        this.available =
+            NexusModel.Utils.boolean(
+                data.available,
+                true
+            );
+
+        this.featured =
+            NexusModel.Utils.boolean(
+                data.featured
+            );
+
+    }
+
+
+    get initials() {
+
+        return NexusModel.Utils.initials(
+            this.name
+        );
+
+    }
+
+
+    get verified() {
+
+        return this.verification.verified;
+
+    }
+
+
+    get badge() {
+
+        if (
+            this.verification.status ===
+            NexusModel.Enums.VerificationStatus.CERTIFIED
+        ) {
+
+            return "Nexus Certified";
+
+        }
+
+        if (this.verification.verified) {
+
+            return "Nexus Verified";
+
+        }
+
+        return "Unverified";
+
+    }
+
+}
+
+
+/* ========================================================================
+   08. BUSINESS MODEL
+   ======================================================================== */
+
+class NexusBusiness extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            "business";
+
+        this.name =
+            NexusModel.Utils.string(
+                data.name,
+                "Nexus Business"
+            );
+
+        this.legalName =
+            NexusModel.Utils.string(
+                data.legalName
+            );
+
+        this.industry =
+            NexusModel.Utils.string(
+                data.industry,
+                "Professional Services"
+            );
+
+        this.description =
+            NexusModel.Utils.string(
+                data.description
+            );
+
+        this.logo =
+            NexusModel.Utils.string(
+                data.logo
+            );
+
+        this.website =
+            NexusModel.Utils.string(
+                data.website
+            );
+
+        this.email =
+            NexusModel.Utils.string(
+                data.email
+            );
+
+        this.phone =
+            NexusModel.Utils.string(
+                data.phone
+            );
+
+        this.location =
+            new NexusLocation(
+                data.location || {}
+            );
+
+        this.verification =
+            new NexusVerification(
+                data.verification || {}
+            );
+
+        this.services =
+            NexusModel.Utils.array(
+                data.services
+            );
+
+        this.projects =
+            NexusModel.Utils.array(
+                data.projects
+            );
+
+        this.employeeCount =
+            NexusModel.Utils.number(
+                data.employeeCount
+            );
+
+        this.rating =
+            NexusModel.Utils.number(
+                data.rating
+            );
+
+        this.reviewCount =
+            NexusModel.Utils.number(
+                data.reviewCount
+            );
+
+        this.featured =
+            NexusModel.Utils.boolean(
+                data.featured
+            );
+
+    }
+
+
+    get verified() {
+
+        return this.verification.verified;
+
+    }
+
+
+    get badge() {
+
+        if (
+            this.verification.status ===
+            NexusModel.Enums.VerificationStatus.CERTIFIED
+        ) {
+
+            return "Nexus Certified Business";
+
+        }
+
+        if (this.verification.verified) {
+
+            return "Nexus Business";
+
+        }
+
+        return "Business";
+
+    }
+
+}
+
+
+/* ========================================================================
+   09. SERVICE MODEL
+   ======================================================================== */
+
+class NexusService extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            "service";
+
+        this.name =
+            NexusModel.Utils.string(
+                data.name,
+                "Professional Service"
+            );
+
+        this.category =
+            NexusModel.Utils.string(
+                data.category,
+                "General Services"
+            );
+
+        this.description =
+            NexusModel.Utils.string(
+                data.description
+            );
+
+        this.icon =
+            NexusModel.Utils.string(
+                data.icon,
+                "◆"
+            );
+
+        this.location =
+            new NexusLocation(
+                data.location || {}
+            );
+
+        this.providers =
+            NexusModel.Utils.array(
+                data.providers
+            );
+
+        this.available =
+            NexusModel.Utils.boolean(
+                data.available,
+                true
+            );
+
+        this.featured =
+            NexusModel.Utils.boolean(
+                data.featured
+            );
+
+    }
+
+}
+
+
+/* ========================================================================
+   10. PROJECT MODEL
+   ======================================================================== */
+
+class NexusProject extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            "project";
+
+        this.name =
+            NexusModel.Utils.string(
+                data.name,
+                "Nexus Project"
+            );
+
+        this.description =
+            NexusModel.Utils.string(
+                data.description
+            );
+
+        this.category =
+            NexusModel.Utils.string(
+                data.category,
+                "Construction"
+            );
+
+        this.client =
+            NexusModel.Utils.string(
+                data.client
+            );
+
+        this.contractor =
+            NexusModel.Utils.string(
+                data.contractor
+            );
+
+        this.location =
+            new NexusLocation(
+                data.location || {}
+            );
+
+        this.status =
+            NexusModel.Utils.string(
+                data.status,
+                "active"
+            );
+
+        this.startDate =
+            NexusModel.Utils.string(
+                data.startDate
+            );
+
+        this.endDate =
+            NexusModel.Utils.string(
+                data.endDate
+            );
+
+        this.progress =
+            Math.min(
+                100,
+                Math.max(
+                    0,
+                    NexusModel.Utils.number(
+                        data.progress
+                    )
+                )
+            );
+
+        this.coverImage =
+            NexusModel.Utils.string(
+                data.coverImage
+            );
+
+        this.gallery =
+            NexusModel.Utils.array(
+                data.gallery
+            );
+
+        this.team =
+            NexusModel.Utils.array(
+                data.team
+            );
+
+    }
+
+}
+
+
+/* ========================================================================
+   11. SEARCH RESULT MODEL
+   ======================================================================== */
+
+class NexusSearchResult extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            NexusModel.Utils.string(
+                data.type,
+                NexusModel.Enums.SearchType.ALL
+            );
+
+        this.name =
+            NexusModel.Utils.string(
+                data.name,
+                "Nexus Network Member"
+            );
+
+        this.role =
+            NexusModel.Utils.string(
+                data.role,
+                "Verified Professional"
+            );
+
+        this.category =
+            NexusModel.Utils.string(
+                data.category
+            );
+
+        this.description =
+            NexusModel.Utils.string(
+                data.description
+            );
+
+        this.location =
+            NexusModel.Utils.string(
+                data.location,
+                "Nigeria"
+            );
+
+        this.badge =
+            NexusModel.Utils.string(
+                data.badge,
+                "Nexus Verified"
+            );
+
+        this.avatar =
+            NexusModel.Utils.string(
+                data.avatar
+            );
+
+        this.score =
+            NexusModel.Utils.number(
+                data.score
+            );
+
+        this.metadata =
+            NexusModel.Utils.object(
+                data.metadata
+            );
+
+    }
+
+
+    get initials() {
+
+        return NexusModel.Utils.initials(
+            this.name
+        );
+
+    }
+
+}
+
+
+/* ========================================================================
+   12. REQUEST MODEL
+   ======================================================================== */
+
+class NexusRequest extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            "request";
+
+        this.service =
+            NexusModel.Utils.string(
+                data.service,
+                "Professional Service"
+            );
+
+        this.description =
+            NexusModel.Utils.string(
+                data.description
+            );
+
+        this.status =
+            NexusModel.Utils.string(
+                data.status,
+                NexusModel.Enums.RequestStatus.PENDING
+            );
+
+        this.priority =
+            NexusModel.Utils.string(
+                data.priority,
+                NexusModel.Enums.RequestPriority.STANDARD
+            );
+
+        this.requesterId =
+            NexusModel.Utils.string(
+                data.requesterId
+            );
+
+        this.providerId =
+            NexusModel.Utils.string(
+                data.providerId
+            );
+
+        this.location =
+            new NexusLocation(
+                data.location || {}
+            );
+
+        this.preferredDate =
+            NexusModel.Utils.string(
+                data.preferredDate
+            );
+
+        this.budget =
+            NexusModel.Utils.number(
+                data.budget
+            );
+
+        this.notes =
+            NexusModel.Utils.string(
+                data.notes
+            );
+
+    }
+
+
+    get active() {
+
+        return ![
+            NexusModel.Enums.RequestStatus.COMPLETED,
+            NexusModel.Enums.RequestStatus.CANCELLED
+        ].includes(
+            this.status
+        );
+
+    }
+
+}
+
+
+/* ========================================================================
+   13. NOTIFICATION MODEL
+   ======================================================================== */
+
+class NexusNotification extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            NexusModel.Utils.string(
+                data.type,
+                NexusModel.Enums.NotificationType.SYSTEM
+            );
+
+        this.title =
+            NexusModel.Utils.string(
+                data.title,
+                "Nexus Connect"
+            );
+
+        this.message =
+            NexusModel.Utils.string(
+                data.message
+            );
+
+        this.read =
+            NexusModel.Utils.boolean(
+                data.read
+            );
+
+        this.priority =
+            NexusModel.Utils.string(
+                data.priority,
+                NexusModel.Enums.RequestPriority.STANDARD
+            );
+
+        this.action =
+            NexusModel.Utils.string(
+                data.action
+            );
+
+        this.timestamp =
+            NexusModel.Utils.string(
+                data.timestamp,
+                NexusModel.Utils.now()
+            );
+
+    }
+
+}
+
+
+/* ========================================================================
+   14. USER MODEL
+   ======================================================================== */
+
+class NexusUser extends NexusBaseModel {
+
+    constructor(data = {}) {
+
+        super(data);
+
+        this.type =
+            "user";
+
+        this.name =
+            NexusModel.Utils.string(
+                data.name,
+                "Nexus User"
+            );
+
+        this.email =
+            NexusModel.Utils.string(
+                data.email
+            );
+
+        this.phone =
+            NexusModel.Utils.string(
+                data.phone
+            );
+
+        this.role =
+            NexusModel.Utils.string(
+                data.role,
+                NexusModel.Enums.UserRole.VISITOR
+            );
+
+        this.avatar =
+            NexusModel.Utils.string(
+                data.avatar
+            );
+
+        this.location =
+            new NexusLocation(
+                data.location || {}
+            );
+
+        this.verification =
+            new NexusVerification(
+                data.verification || {}
+            );
+
+        this.permissions =
+            NexusModel.Utils.array(
+                data.permissions
+            );
+
+        this.preferences =
+            NexusModel.Utils.object(
+                data.preferences
+            );
+
+        this.active =
+            NexusModel.Utils.boolean(
+                data.active,
+                true
+            );
+
+    }
+
+
+    get initials() {
+
+        return NexusModel.Utils.initials(
+            this.name
+        );
+
+    }
+
+
+    get verified() {
+
+        return this.verification.verified;
+
+    }
+
+}
+
+
+/* ========================================================================
+   15. MODEL FACTORY
+   ======================================================================== */
+
+NexusModel.create = function (
+    type,
+    data = {}
+) {
+
+    switch (
+        NexusModel.Utils.normalizeText(type)
+    ) {
+
+        case "professional":
+
+            return new NexusProfessional(
+                data
+            );
+
+
+        case "business":
+
+            return new NexusBusiness(
+                data
+            );
+
+
+        case "service":
+
+            return new NexusService(
+                data
+            );
+
+
+        case "project":
+
+            return new NexusProject(
+                data
+            );
+
+
+        case "request":
+
+            return new NexusRequest(
+                data
+            );
+
+
+        case "notification":
+
+            return new NexusNotification(
+                data
+            );
+
+
+        case "user":
+
+            return new NexusUser(
+                data
+            );
+
+
+        case "search":
+
+        case "searchresult":
+
+            return new NexusSearchResult(
+                data
+            );
+
+
+        case "location":
+
+            return new NexusLocation(
+                data
+            );
+
+
+        default:
+
+            return new NexusBaseModel(
+                data
+            );
+
+    }
+
+};
+
+
+/* ========================================================================
+   16. COLLECTION FACTORY
+   ======================================================================== */
+
+NexusModel.collection = function (
+    type,
+    items = []
+) {
+
+    return NexusModel.Utils
+        .array(items)
+        .map(
+            item =>
+                NexusModel.create(
+                    type,
+                    item
+                )
+        );
+
+};
+
+
+/* ========================================================================
+   17. SEARCH RESULT NORMALIZATION
+   ======================================================================== */
+
+NexusModel.normalizeSearchResults =
+    function (results = []) {
+
+        return NexusModel.Utils
+            .array(results)
+            .map(
+                result =>
+                    result instanceof NexusSearchResult
+                        ? result
+                        : new NexusSearchResult(
+                            result
+                        )
+            );
+
+    };
+
+
+/* ========================================================================
+   18. PROFESSIONAL NORMALIZATION
+   ======================================================================== */
+
+NexusModel.normalizeProfessional =
+    function (data = {}) {
+
+        return data instanceof NexusProfessional
+            ? data
+            : new NexusProfessional(
+                data
+            );
+
+    };
+
+
+/* ========================================================================
+   19. BUSINESS NORMALIZATION
+   ======================================================================== */
+
+NexusModel.normalizeBusiness =
+    function (data = {}) {
+
+        return data instanceof NexusBusiness
+            ? data
+            : new NexusBusiness(
+                data
+            );
+
+    };
+
+
+/* ========================================================================
+   20. REQUEST NORMALIZATION
+   ======================================================================== */
+
+NexusModel.normalizeRequest =
+    function (data = {}) {
+
+        return data instanceof NexusRequest
+            ? data
+            : new NexusRequest(
+                data
+            );
+
+    };
+
+
+/* ========================================================================
+   21. SERIALIZATION
+   ======================================================================== */
+
+NexusModel.serialize =
+    function (model) {
+
+        if (
+            !model ||
+            typeof model.toJSON !== "function"
+        ) {
+
+            return NexusModel.Utils.clone(
+                model
+            );
+
+        }
+
+        return model.toJSON();
+
+    };
+
+
+/* ========================================================================
+   22. VALIDATION
+   ======================================================================== */
+
+NexusModel.validate =
+    function (model) {
+
+        if (!model) {
+
+            return {
+
+                valid: false,
+
+                errors: [
+                    "Model is required."
+                ]
+
+            };
+
+        }
+
+
+        const errors = [];
+
+
+        if (!model.id) {
+
+            errors.push(
+                "Model ID is required."
+            );
+
+        }
+
+
+        if (!model.createdAt) {
+
+            errors.push(
+                "Created timestamp is required."
+            );
+
+        }
+
+
+        return {
+
+            valid:
+                errors.length === 0,
+
+            errors
+
+        };
+
+    };
+
+
+/* ========================================================================
+   23. DEMONSTRATION PROFESSIONAL DATA
+   ======================================================================== */
+
+NexusModel.demoProfessionals = [
+
+    new NexusProfessional({
+
+        id:
+            "professional-001",
+
+        name:
+            "Nexus Certified Engineer",
+
+        title:
+            "Senior Building Engineer",
+
+        role:
+            "Building & Construction Engineering",
+
+        category:
+            "Building Engineering",
+
+        company:
+            "Nexus Buildsolutions Limited",
+
+        location: {
+
+            country:
+                "Nigeria",
+
+            state:
+                "Gombe",
+
+            city:
+                "Gombe"
+
+        },
+
+        verification: {
+
+            status:
+                NexusModel.Enums.VerificationStatus.CERTIFIED,
+
+            level:
+                "professional",
+
+            verifiedAt:
+                "2030-01-01T00:00:00.000Z"
+
+        },
+
+        services: [
+
+            "Building Construction",
+
+            "Project Management",
+
+            "Site Engineering",
+
+            "Construction Supervision"
+
+        ],
+
+        skills: [
+
+            "Construction",
+
+            "Site Management",
+
+            "Project Delivery",
+
+            "Building Engineering"
+
+        ],
+
+        yearsExperience:
+            10,
+
+        rating:
+            4.9,
+
+        reviewCount:
+            128,
+
+        available:
+            true,
+
+        featured:
+            true
+
+    }),
+
+
+    new NexusProfessional({
+
+        id:
+            "professional-002",
+
+        name:
+            "Nexus Electrical Specialist",
+
+        title:
+            "Electrical Systems Specialist",
+
+        role:
+            "Electrical & Technical Services",
+
+        category:
+            "Electrical Services",
+
+        location: {
+
+            country:
+                "Nigeria",
+
+            state:
+                "FCT",
+
+            city:
+                "Abuja"
+
+        },
+
+        verification: {
+
+            status:
+                NexusModel.Enums.VerificationStatus.VERIFIED,
+
+            level:
+                "professional"
+
+        },
+
+        services: [
+
+            "Electrical Installation",
+
+            "Power Systems",
+
+            "Maintenance"
+
+        ],
+
+        yearsExperience:
+            8,
+
+        rating:
+            4.8,
+
+        reviewCount:
+            94,
+
+        available:
+            true,
+
+        featured:
+            true
+
+    })
+
+];
+
+
+/* ========================================================================
+   24. DEMONSTRATION BUSINESS DATA
+   ======================================================================== */
+
+NexusModel.demoBusinesses = [
+
+    new NexusBusiness({
+
+        id:
+            "business-001",
+
+        name:
+            "Nexus Construction Partner",
+
+        industry:
+            "Construction & Property",
+
+        description:
+            "Verified construction and property services partner.",
+
+        location: {
+
+            country:
+                "Nigeria",
+
+            state:
+                "FCT",
+
+            city:
+                "Abuja"
+
+        },
+
+        verification: {
+
+            status:
+                NexusModel.Enums.VerificationStatus.VERIFIED
+
+        },
+
+        services: [
+
+            "Construction",
+
+            "Property Development",
+
+            "Project Management"
+
+        ],
+
+        rating:
+            4.7,
+
+        reviewCount:
+            76,
+
+        featured:
+            true
+
+    })
+
+];
+
+
+/* ========================================================================
+   25. DEMONSTRATION SERVICE DATA
+   ======================================================================== */
+
+NexusModel.demoServices = [
+
+    new NexusService({
+
+        id:
+            "service-001",
+
+        name:
+            "Building Engineering",
+
+        category:
+            "Construction",
+
+        description:
+            "Professional building engineering, supervision and project delivery.",
+
+        icon:
+            "BE",
+
+        featured:
+            true
+
+    }),
+
+
+    new NexusService({
+
+        id:
+            "service-002",
+
+        name:
+            "Electrical Services",
+
+        category:
+            "Technical",
+
+        description:
+            "Verified electrical professionals and technical service providers.",
+
+        icon:
+            "EL",
+
+        featured:
+            true
+
+    }),
+
+
+    new NexusService({
+
+        id:
+            "service-003",
+
+        name:
+            "Property Services",
+
+        category:
+            "Property",
+
+        description:
+            "Professional property development, management and support.",
+
+        icon:
+            "PR",
+
+        featured:
+            true
+
+    }),
+
+
+    new NexusService({
+
+        id:
+            "service-004",
+
+        name:
+            "Project Management",
+
+        category:
+            "Professional",
+
+        description:
+            "Structured project coordination and professional delivery.",
+
+        icon:
+            "PM",
+
+        featured:
+            true
+
+    })
+
+];
+
+
+/* ========================================================================
+   26. PUBLIC MODEL API
+   ======================================================================== */
+
+NexusModel.classes = {
+
+    Base:
+        NexusBaseModel,
+
+    Location:
+        NexusLocation,
+
+    Verification:
+        NexusVerification,
+
+    User:
+        NexusUser,
+
+    Professional:
+        NexusProfessional,
+
+    Business:
+        NexusBusiness,
+
+    Service:
+        NexusService,
+
+    Project:
+        NexusProject,
+
+    SearchResult:
+        NexusSearchResult,
+
+    Request:
+        NexusRequest,
+
+    Notification:
+        NexusNotification
+
+};
+
+
+/* ========================================================================
+   27. GLOBAL EXPORT
+   ======================================================================== */
+
+window.NexusModel =
+    NexusModel;
+
+
+/* ========================================================================
+   28. MODEL INITIALIZATION
+   ======================================================================== */
+
+console.info(
+    "[Nexus Connect] Model layer initialized successfully."
+);
+
+
+/* ========================================================================
+   END — NEXUS CONNECT 2030 MODEL LAYER
+   ======================================================================== */
