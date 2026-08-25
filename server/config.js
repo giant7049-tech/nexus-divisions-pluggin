@@ -1,845 +1,775 @@
-'use strict';
+/* =========================================================
+   NEXUS CONNECT 2030
+   Nexus Buildsolutions Limited
 
-/**
- * ================================================================
- * NEXUS CONNECT 2030
- * Nexus Buildsolutions Limited
- *
- * File:
- *   server/config.js
- *
- * Purpose:
- *   Central application configuration.
- *
- * Design principles:
- *   - Environment-driven configuration
- *   - No hard-coded secrets
- *   - Safe production defaults
- *   - Centralized configuration
- *   - Render deployment ready
- *   - Database/API ready
- *   - Authentication ready
- *   - Real-time communication ready
- * ================================================================
- */
+   configuration.js
+   ---------------------------------------------------------
+   Central application configuration.
 
-require('dotenv').config();
+   Responsibilities:
+   - Environment configuration
+   - API configuration
+   - Application settings
+   - Feature flags
+   - Search configuration
+   - Verification configuration
+   - Storage configuration
+   - UI configuration
+   - Future backend/Render configuration
+   ========================================================= */
 
+"use strict";
 
-/* ================================================================
- * ENVIRONMENT
- * ================================================================ */
 
-const NODE_ENV = (
-    process.env.NODE_ENV || 'development'
-).trim().toLowerCase();
+/* =========================================================
+   01. ENVIRONMENT
+   ========================================================= */
 
+const NexusConfiguration = {
 
-const isProduction = NODE_ENV === 'production';
+    application: {
 
-const isDevelopment = NODE_ENV === 'development';
+        name: "Nexus Connect",
 
-const isTest = NODE_ENV === 'test';
-
-
-/* ================================================================
- * APPLICATION IDENTITY
- * ================================================================ */
-
-const APP_NAME =
-    process.env.APP_NAME ||
-    'Nexus Connect';
-
-const APP_VERSION =
-    process.env.APP_VERSION ||
-    '1.0.0';
-
-const COMPANY_NAME =
-    process.env.COMPANY_NAME ||
-    'Nexus Buildsolutions Limited';
-
-const APP_DESCRIPTION =
-    process.env.APP_DESCRIPTION ||
-    'Trusted professional network for people, expertise, services and solutions.';
-
-
-/* ================================================================
- * SERVER
- * ================================================================ */
-
-const PORT = Number(
-    process.env.PORT || 10000
-);
-
-const HOST =
-    process.env.HOST ||
-    '0.0.0.0';
-
-
-/* ================================================================
- * PUBLIC APPLICATION URL
- *
- * On Render:
- *
- * PUBLIC_APP_URL=https://your-domain.onrender.com
- *
- * Local development:
- *
- * PUBLIC_APP_URL=http://localhost:10000
- * ================================================================ */
-
-const PUBLIC_APP_URL =
-    process.env.PUBLIC_APP_URL ||
-    `http://localhost:${PORT}`;
-
-
-/* ================================================================
- * API
- * ================================================================ */
-
-const API_PREFIX =
-    process.env.API_PREFIX ||
-    '/api';
-
-const API_VERSION =
-    process.env.API_VERSION ||
-    'v1';
-
-const API_BASE_PATH =
-    `${API_PREFIX}/${API_VERSION}`;
-
-
-/* ================================================================
- * FRONTEND
- * ================================================================ */
-
-const PUBLIC_DIRECTORY =
-    process.env.PUBLIC_DIRECTORY ||
-    'public';
-
-const FRONTEND_ENTRY =
-    process.env.FRONTEND_ENTRY ||
-    'index.html';
-
-
-/* ================================================================
- * BRAND ASSETS
- * ================================================================ */
-
-const BRAND = Object.freeze({
-
-    name: COMPANY_NAME,
-
-    product:
-        APP_NAME,
-
-    logo:
-        '/assets/logo/Screenshot%202025-09-29%20122409.png',
-
-    applicationIcon:
-        '/assets/icons/icon.svg',
-
-    tagline:
-        'Connecting People. Finding Expertise. Delivering Solutions.',
-
-    description:
-        APP_DESCRIPTION
-
-});
-
-
-/* ================================================================
- * DATABASE
- *
- * IMPORTANT:
- * Do not put credentials directly here.
- *
- * Example .env:
- *
- * DATABASE_URL=postgresql://...
- *
- * DB_HOST=
- * DB_PORT=
- * DB_NAME=
- * DB_USER=
- * DB_PASSWORD=
- * ================================================================ */
-
-const DATABASE = Object.freeze({
-
-    url:
-        process.env.DATABASE_URL || '',
-
-    host:
-        process.env.DB_HOST || '',
-
-    port:
-        Number(
-            process.env.DB_PORT || 5432
-        ),
-
-    name:
-        process.env.DB_NAME || '',
-
-    user:
-        process.env.DB_USER || '',
-
-    password:
-        process.env.DB_PASSWORD || '',
-
-    ssl:
-        isProduction
-            ? true
-            : process.env.DB_SSL === 'true',
-
-    poolMin:
-        Number(
-            process.env.DB_POOL_MIN || 0
-        ),
-
-    poolMax:
-        Number(
-            process.env.DB_POOL_MAX || 10
-        )
-
-});
-
-
-/* ================================================================
- * AUTHENTICATION
- *
- * JWT secret MUST come from environment variables.
- *
- * Never commit the real JWT secret to GitHub.
- * ================================================================ */
-
-const AUTH = Object.freeze({
-
-    jwtSecret:
-        process.env.JWT_SECRET || '',
-
-    jwtExpiresIn:
-        process.env.JWT_EXPIRES_IN ||
-        '7d',
-
-    refreshTokenExpiresIn:
-        process.env.REFRESH_TOKEN_EXPIRES_IN ||
-        '30d',
-
-    sessionCookieName:
-        process.env.SESSION_COOKIE_NAME ||
-        'nexus_session',
-
-    secureCookies:
-        isProduction,
-
-    sameSite:
-        process.env.COOKIE_SAME_SITE ||
-        'lax'
-
-});
-
-
-/* ================================================================
- * SECURITY
- * ================================================================ */
-
-const SECURITY = Object.freeze({
-
-    corsOrigin:
-        process.env.CORS_ORIGIN ||
-        PUBLIC_APP_URL,
-
-    trustProxy:
-        isProduction,
-
-    rateLimitWindowMs:
-        Number(
-            process.env.RATE_LIMIT_WINDOW_MS ||
-            15 * 60 * 1000
-        ),
-
-    rateLimitMax:
-        Number(
-            process.env.RATE_LIMIT_MAX ||
-            100
-        ),
-
-    bodyLimit:
-        process.env.BODY_LIMIT ||
-        '1mb'
-
-});
-
-
-/* ================================================================
- * REAL-TIME / SOCKETS
- * ================================================================ */
-
-const SOCKETS = Object.freeze({
-
-    enabled:
-        process.env.SOCKETS_ENABLED !== 'false',
-
-    path:
-        process.env.SOCKET_PATH ||
-        '/socket.io',
-
-    pingInterval:
-        Number(
-            process.env.SOCKET_PING_INTERVAL ||
-            25000
-        ),
-
-    pingTimeout:
-        Number(
-            process.env.SOCKET_PING_TIMEOUT ||
-            20000
-        )
-
-});
-
-
-/* ================================================================
- * NEXUS CONNECT FEATURES
- *
- * Central feature flags allow us to activate/deactivate
- * platform capabilities without rewriting the application.
- * ================================================================ */
-
-const FEATURES = Object.freeze({
-
-    finder:
-        process.env.FEATURE_FINDER !== 'false',
-
-    requests:
-        process.env.FEATURE_REQUESTS !== 'false',
-
-    network:
-        process.env.FEATURE_NETWORK !== 'false',
-
-    messaging:
-        process.env.FEATURE_MESSAGING !== 'false',
-
-    smartMatching:
-        process.env.FEATURE_SMART_MATCHING !== 'false',
-
-    notifications:
-        process.env.FEATURE_NOTIFICATIONS !== 'false',
-
-    verification:
-        process.env.FEATURE_VERIFICATION !== 'false',
-
-    nexusStaff:
-        process.env.FEATURE_NEXUS_STAFF !== 'false',
-
-    nexusCertified:
-        process.env.FEATURE_NEXUS_CERTIFIED !== 'false',
-
-    certifiedBusiness:
-        process.env.FEATURE_CERTIFIED_BUSINESS !== 'false',
-
-    analytics:
-        process.env.FEATURE_ANALYTICS !== 'false',
-
-    aiSearch:
-        process.env.FEATURE_AI_SEARCH === 'true'
-
-});
-
-
-/* ================================================================
- * NEXUS TRUST LEVELS
- *
- * These values will later connect to the database and
- * verification service.
- * ================================================================ */
-
-const TRUST_LEVELS = Object.freeze({
-
-    NEXUS_STAFF: 'nexus_staff',
-
-    NEXUS_CERTIFIED:
-        'nexus_certified',
-
-    CERTIFIED_BUSINESS:
-        'certified_business',
-
-    VERIFIED_USER:
-        'verified_user',
-
-    STANDARD_USER:
-        'standard_user'
-
-});
-
-
-/* ================================================================
- * USER STATUS
- * ================================================================ */
-
-const USER_STATUS = Object.freeze({
-
-    ACTIVE:
-        'active',
-
-    PENDING:
-        'pending',
-
-    SUSPENDED:
-        'suspended',
-
-    DEACTIVATED:
-        'deactivated',
-
-    BLOCKED:
-        'blocked'
-
-});
-
-
-/* ================================================================
- * REQUEST STATUS
- * ================================================================ */
-
-const REQUEST_STATUS = Object.freeze({
-
-    DRAFT:
-        'draft',
-
-    OPEN:
-        'open',
-
-    MATCHING:
-        'matching',
-
-    CONNECTED:
-        'connected',
-
-    IN_PROGRESS:
-        'in_progress',
-
-    COMPLETED:
-        'completed',
-
-    CANCELLED:
-        'cancelled'
-
-});
-
-
-/* ================================================================
- * VERIFICATION STATUS
- * ================================================================ */
-
-const VERIFICATION_STATUS = Object.freeze({
-
-    UNVERIFIED:
-        'unverified',
-
-    PENDING:
-        'pending',
-
-    VERIFIED:
-        'verified',
-
-    EXPIRED:
-        'expired',
-
-    REVOKED:
-        'revoked'
-
-});
-
-
-/* ================================================================
- * SEARCH
- * ================================================================ */
-
-const SEARCH = Object.freeze({
-
-    defaultLimit:
-        Number(
-            process.env.SEARCH_DEFAULT_LIMIT ||
-            20
-        ),
-
-    maxLimit:
-        Number(
-            process.env.SEARCH_MAX_LIMIT ||
-            100
-        ),
-
-    minimumQueryLength:
-        Number(
-            process.env.SEARCH_MIN_QUERY_LENGTH ||
-            2
-        )
-
-});
-
-
-/* ================================================================
- * FILE STORAGE
- * ================================================================ */
-
-const STORAGE = Object.freeze({
-
-    provider:
-        process.env.STORAGE_PROVIDER ||
-        'local',
-
-    uploadDirectory:
-        process.env.UPLOAD_DIRECTORY ||
-        'uploads',
-
-    maxFileSize:
-        Number(
-            process.env.MAX_FILE_SIZE ||
-            5 * 1024 * 1024
-        )
-
-});
-
-
-/* ================================================================
- * EMAIL
- *
- * Prepared for future notifications, verification emails,
- * password reset and platform messaging.
- * ================================================================ */
-
-const EMAIL = Object.freeze({
-
-    enabled:
-        process.env.EMAIL_ENABLED === 'true',
-
-    host:
-        process.env.SMTP_HOST || '',
-
-    port:
-        Number(
-            process.env.SMTP_PORT || 587
-        ),
-
-    user:
-        process.env.SMTP_USER || '',
-
-    password:
-        process.env.SMTP_PASSWORD || '',
-
-    from:
-        process.env.EMAIL_FROM ||
-        'Nexus Connect <no-reply@nexusbuildsolutions.com>'
-
-});
-
-
-/* ================================================================
- * LOGGING
- * ================================================================ */
-
-const LOGGING = Object.freeze({
-
-    level:
-        process.env.LOG_LEVEL ||
-        (
-            isProduction
-                ? 'info'
-                : 'debug'
-        ),
-
-    pretty:
-        !isProduction
-
-});
-
-
-/* ================================================================
- * CORS
- * ================================================================ */
-
-const CORS_ORIGINS = Object.freeze(
-
-    (process.env.CORS_ORIGINS || PUBLIC_APP_URL)
-        .split(',')
-        .map(
-            origin => origin.trim()
-        )
-        .filter(Boolean)
-
-);
-
-
-/* ================================================================
- * COMPLETE CONFIGURATION OBJECT
- * ================================================================ */
-
-const config = Object.freeze({
-
-    app: Object.freeze({
-
-        name:
-            APP_NAME,
-
-        version:
-            APP_VERSION,
+        version: "2030.1",
 
         company:
-            COMPANY_NAME,
-
-        description:
-            APP_DESCRIPTION,
+            "Nexus Buildsolutions Limited",
 
         environment:
-            NODE_ENV,
+            "production-ready",
 
-        isProduction,
+        country:
+            "Nigeria",
 
-        isDevelopment,
+        language:
+            "en-NG",
 
-        isTest
+        timezone:
+            "Africa/Lagos"
 
-    }),
-
-
-    server: Object.freeze({
-
-        host:
-            HOST,
-
-        port:
-            PORT,
-
-        publicUrl:
-            PUBLIC_APP_URL
-
-    }),
+    },
 
 
-    api: Object.freeze({
+    /* =====================================================
+       02. BRAND CONFIGURATION
+       ===================================================== */
+
+    brand: {
+
+        primary:
+            "#071A33",
+
+        secondary:
+            "#D8AD45",
+
+        white:
+            "#FFFFFF",
+
+        logo:
+            "/assets/logo/Screenshot%202025-09-29%20122409.png"
+
+    },
+
+
+    /* =====================================================
+       03. API / BACKEND
+       ===================================================== */
+
+    api: {
+
+        /*
+         * Keep this empty while the frontend is running
+         * without a deployed backend.
+         *
+         * When your Render backend is ready, change this to:
+         *
+         * https://your-service-name.onrender.com/api
+         */
+
+        baseUrl: "",
+
+        timeout:
+            15000,
+
+        retryAttempts:
+            2,
+
+        headers: {
+
+            "Accept":
+                "application/json",
+
+            "Content-Type":
+                "application/json"
+
+        }
+
+    },
+
+
+    /* =====================================================
+       04. APPLICATION ROUTES
+       ===================================================== */
+
+    routes: {
+
+        home:
+            "#home",
+
+        finder:
+            "#finder",
+
+        requests:
+            "#requests",
+
+        network:
+            "#network",
+
+        platform:
+            "#platform"
+
+    },
+
+
+    /* =====================================================
+       05. BACKEND ENDPOINTS
+       ===================================================== */
+
+    endpoints: {
+
+        search:
+            "/search",
+
+        users:
+            "/users",
+
+        professionals:
+            "/professionals",
+
+        businesses:
+            "/businesses",
+
+        requests:
+            "/requests",
+
+        verification:
+            "/verification",
+
+        notifications:
+            "/notifications",
+
+        messages:
+            "/messages",
+
+        profile:
+            "/auth/me",
+
+        login:
+            "/auth/login",
+
+        register:
+            "/auth/register",
+
+        logout:
+            "/auth/logout"
+
+    },
+
+
+    /* =====================================================
+       06. SEARCH CONFIGURATION
+       ===================================================== */
+
+    search: {
+
+        enabled:
+            true,
+
+        minimumCharacters:
+            2,
+
+        maximumCharacters:
+            120,
+
+        resultsPerPage:
+            20,
+
+        debounce:
+            300,
+
+        locations: [
+
+            "Abuja",
+
+            "Lagos",
+
+            "Kano",
+
+            "Kaduna",
+
+            "Gombe",
+
+            "Kogi",
+
+            "Jos",
+
+            "Port Harcourt",
+
+            "Ibadan",
+
+            "Enugu",
+
+            "Benin City",
+
+            "Nigeria"
+
+        ],
+
+        categories: [
+
+            "Architect",
+
+            "Building Engineer",
+
+            "Civil Engineer",
+
+            "Electrical Engineer",
+
+            "Mechanical Engineer",
+
+            "Quantity Surveyor",
+
+            "Surveyor",
+
+            "Project Manager",
+
+            "Site Engineer",
+
+            "Technician",
+
+            "Construction Company",
+
+            "Architecture Company",
+
+            "Real Estate",
+
+            "Property Services",
+
+            "Electrical Services",
+
+            "Plumbing Services",
+
+            "Building Materials",
+
+            "Professional Services"
+
+        ]
+
+    },
+
+
+    /* =====================================================
+       07. USER TYPES
+       ===================================================== */
+
+    userTypes: {
+
+        guest:
+            "guest",
+
+        user:
+            "verified-user",
+
+        professional:
+            "certified-professional",
+
+        business:
+            "certified-business",
+
+        staff:
+            "nexus-staff",
+
+        administrator:
+            "administrator"
+
+    },
+
+
+    /* =====================================================
+       08. VERIFICATION SYSTEM
+       ===================================================== */
+
+    verification: {
+
+        enabled:
+            true,
+
+        levels: {
+
+            user:
+                "VERIFIED USER",
+
+            professional:
+                "NEXUS CERTIFIED",
+
+            business:
+                "CERTIFIED BUSINESS",
+
+            staff:
+                "NEXUS STAFF"
+
+        },
+
+        requirements: {
+
+            userIdentity:
+                true,
+
+            professionalCredentials:
+                true,
+
+            businessDocuments:
+                true,
+
+            staffAuthorization:
+                true
+
+        }
+
+    },
+
+
+    /* =====================================================
+       09. REQUEST SYSTEM
+       ===================================================== */
+
+    requests: {
+
+        enabled:
+            true,
+
+        priorities: [
+
+            "standard",
+
+            "urgent",
+
+            "high"
+
+        ],
+
+        statuses: [
+
+            "draft",
+
+            "submitted",
+
+            "matching",
+
+            "matched",
+
+            "connected",
+
+            "completed",
+
+            "cancelled"
+
+        ],
+
+        maximumDescriptionLength:
+            2000
+
+    },
+
+
+    /* =====================================================
+       10. NETWORK
+       ===================================================== */
+
+    network: {
+
+        enabled:
+            true,
+
+        professionalProfiles:
+            true,
+
+        businessProfiles:
+            true,
+
+        staffProfiles:
+            true,
+
+        messaging:
+            true,
+
+        ratings:
+            true,
+
+        availability:
+            true
+
+    },
+
+
+    /* =====================================================
+       11. FUTURE PLATFORM FEATURES
+       ===================================================== */
+
+    features: {
+
+        smartSearch:
+            true,
+
+        smartMatching:
+            true,
+
+        professionalDirectory:
+            true,
+
+        businessDirectory:
+            true,
+
+        realTimeMessaging:
+            true,
+
+        notifications:
+            true,
+
+        verification:
+            true,
+
+        analytics:
+            true,
+
+        trustScore:
+            true,
+
+        aiSearch:
+            true,
+
+        recommendationEngine:
+            true
+
+    },
+
+
+    /* =====================================================
+       12. DEMO MODE
+       ===================================================== */
+
+    demo: {
+
+        /*
+         * TRUE:
+         * The frontend can display controlled demonstration
+         * data when a backend has not yet been connected.
+         *
+         * FALSE:
+         * The application relies entirely on the backend.
+         */
+
+        enabled:
+            true,
+
+        showDemoResults:
+            true,
+
+        demoUser:
+            true,
+
+        demoProfessionals:
+            true,
+
+        demoBusinesses:
+            true,
+
+        demoRequests:
+            true
+
+    },
+
+
+    /* =====================================================
+       13. LOCAL STORAGE
+       ===================================================== */
+
+    storage: {
 
         prefix:
-            API_PREFIX,
+            "nexus_connect_",
 
-        version:
-            API_VERSION,
+        keys: {
 
-        basePath:
-            API_BASE_PATH
+            user:
+                "current_user",
 
-    }),
+            token:
+                "auth_token",
 
+            search:
+                "last_search",
 
-    frontend: Object.freeze({
+            preferences:
+                "preferences",
 
-        publicDirectory:
-            PUBLIC_DIRECTORY,
+            notifications:
+                "notifications",
 
-        entry:
-            FRONTEND_ENTRY
+            requests:
+                "requests"
 
-    }),
+        }
 
-
-    brand:
-        BRAND,
-
-
-    database:
-        DATABASE,
+    },
 
 
-    auth:
-        AUTH,
+    /* =====================================================
+       14. UI CONFIGURATION
+       ===================================================== */
+
+    ui: {
+
+        toastDuration:
+            3500,
+
+        animationDuration:
+            320,
+
+        searchLoadingText:
+            "Searching Nexus Connect...",
+
+        emptySearchText:
+            "No direct match found yet.",
+
+        networkErrorText:
+            "Nexus Connect could not connect to the service.",
+
+        authenticationRequiredText:
+            "Please sign in to continue."
+
+    },
 
 
-    security:
-        SECURITY,
+    /* =====================================================
+       15. SECURITY
+       ===================================================== */
+
+    security: {
+
+        useHTTPS:
+            true,
+
+        sanitizeInput:
+            true,
+
+        preventUnsafeHTML:
+            true,
+
+        sessionTimeout:
+            30 * 60 * 1000
+
+    },
 
 
-    sockets:
-        SOCKETS,
+    /* =====================================================
+       16. PAGINATION
+       ===================================================== */
+
+    pagination: {
+
+        defaultPage:
+            1,
+
+        defaultLimit:
+            20,
+
+        maximumLimit:
+            100
+
+    },
 
 
-    features:
-        FEATURES,
+    /* =====================================================
+       17. LOCATION
+       ===================================================== */
+
+    location: {
+
+        defaultCountry:
+            "Nigeria",
+
+        defaultState:
+            "",
+
+        defaultCity:
+            "",
+
+        allowUserLocation:
+            true
+
+    },
 
 
-    trustLevels:
-        TRUST_LEVELS,
+    /* =====================================================
+       18. NOTIFICATION CONFIGURATION
+       ===================================================== */
+
+    notifications: {
+
+        enabled:
+            true,
+
+        pollingInterval:
+            30000,
+
+        maximumVisible:
+            10
+
+    },
 
 
-    userStatus:
-        USER_STATUS,
+    /* =====================================================
+       19. MESSAGING
+       ===================================================== */
+
+    messaging: {
+
+        enabled:
+            true,
+
+        maximumMessageLength:
+            2000,
+
+        typingIndicator:
+            true,
+
+        readReceipts:
+            true
+
+    },
 
 
-    requestStatus:
-        REQUEST_STATUS,
+    /* =====================================================
+       20. DEVELOPMENT FLAGS
+       ===================================================== */
 
+    development: {
 
-    verificationStatus:
-        VERIFICATION_STATUS,
+        debug:
+            false,
 
+        consoleLogging:
+            true,
 
-    search:
-        SEARCH,
+        showAPIErrors:
+            false,
 
-
-    storage:
-        STORAGE,
-
-
-    email:
-        EMAIL,
-
-
-    logging:
-        LOGGING,
-
-
-    corsOrigins:
-        CORS_ORIGINS
-
-});
-
-
-/* ================================================================
- * CONFIGURATION VALIDATION
- *
- * We intentionally do not require every production service yet,
- * because the database/authentication infrastructure will be
- * implemented in subsequent files.
- * ================================================================ */
-
-function validateConfig() {
-
-    const warnings = [];
-
-
-    if (isProduction && !AUTH.jwtSecret) {
-
-        warnings.push(
-            'JWT_SECRET is not configured for production.'
-        );
+        showPerformanceMetrics:
+            false
 
     }
 
-
-    if (isProduction && !DATABASE.url) {
-
-        warnings.push(
-            'DATABASE_URL is not configured for production.'
-        );
-
-    }
+};
 
 
-    if (
-        isProduction &&
-        SECURITY.corsOrigin === 'http://localhost:10000'
-    ) {
+/* =========================================================
+   21. CONFIGURATION HELPERS
+   ========================================================= */
 
-        warnings.push(
-            'CORS_ORIGIN is still using the development default.'
-        );
-
-    }
+const NexusConfig = {
 
 
-    if (warnings.length > 0) {
+    get(key, fallback = null) {
 
-        console.warn(
-            '\n[NEXUS CONFIGURATION WARNINGS]'
-        );
+        const parts =
+            String(key).split(".");
 
-        warnings.forEach(
-            warning => {
-                console.warn(
-                    `- ${warning}`
-                );
+
+        let value =
+            NexusConfiguration;
+
+
+        for (const part of parts) {
+
+            if (
+                value &&
+                Object.prototype.hasOwnProperty.call(
+                    value,
+                    part
+                )
+            ) {
+
+                value =
+                    value[part];
+
+            } else {
+
+                return fallback;
+
             }
+
+        }
+
+
+        return value;
+
+    },
+
+
+    apiUrl(endpoint) {
+
+        const base =
+            NexusConfiguration.api.baseUrl;
+
+
+        if (!base) {
+
+            return endpoint;
+
+        }
+
+
+        return `${base.replace(/\/$/, "")}/${String(endpoint).replace(/^\//, "")}`;
+
+    },
+
+
+    isBackendConnected() {
+
+        return Boolean(
+            NexusConfiguration.api.baseUrl
         );
 
-        console.warn('');
+    },
+
+
+    isFeatureEnabled(feature) {
+
+        return Boolean(
+            NexusConfig.get(
+                `features.${feature}`,
+                false
+            )
+        );
 
     }
 
-}
+};
 
 
-/* ================================================================
- * SAFE CONFIGURATION SUMMARY
- *
- * Never log passwords, JWT secrets or database credentials.
- * ================================================================ */
+/* =========================================================
+   22. GLOBAL CONFIGURATION
+   ========================================================= */
 
-function getSafeConfigSummary() {
+window.NexusConfiguration =
+    NexusConfiguration;
 
-    return {
-
-        application:
-            APP_NAME,
-
-        version:
-            APP_VERSION,
-
-        environment:
-            NODE_ENV,
-
-        server:
-            `${HOST}:${PORT}`,
-
-        api:
-            API_BASE_PATH,
-
-        databaseConfigured:
-            Boolean(
-                DATABASE.url ||
-                DATABASE.host
-            ),
-
-        authenticationConfigured:
-            Boolean(
-                AUTH.jwtSecret
-            ),
-
-        socketsEnabled:
-            SOCKETS.enabled,
-
-        enabledFeatures:
-            Object.entries(FEATURES)
-                .filter(
-                    ([, enabled]) => enabled
-                )
-                .map(
-                    ([feature]) => feature
-                )
-
-    };
-
-}
+window.NexusConfig =
+    NexusConfig;
 
 
-/* ================================================================
- * INITIAL VALIDATION
- * ================================================================ */
-
-validateConfig();
-
-
-/* ================================================================
- * EXPORT
- * ================================================================ */
-
-/* ================================================================
- * EXPORT
- * ================================================================ */
-
-module.exports = Object.freeze({
-    ...config,
-
-    validateConfig,
-
-    getSafeConfigSummary
-});
+/* =========================================================
+   END — NEXUS CONNECT 2030 CONFIGURATION
+   ========================================================= */
