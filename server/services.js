@@ -1,5 +1,53 @@
 'use strict';
 
+/**
+ * ================================================================
+ * NEXUS CONNECT 2030
+ * NEXUS BUILDSOLUTIONS LIMITED
+ *
+ * ADVANCED SERVICE ENGINE
+ * ---------------------------------------------------------------
+ * File: services.js
+ *
+ * Architecture:
+ *
+ *   Routes
+ *      ↓
+ *   Service Layer
+ *      ↓
+ *   Models
+ *      ↓
+ *   MongoDB
+ *
+ * Responsibilities:
+ *   • Database lifecycle
+ *   • Authentication
+ *   • Secure PIN handling
+ *   • JWT sessions
+ *   • User profiles
+ *   • Professional discovery
+ *   • Service discovery
+ *   • Conversations
+ *   • Messaging
+ *   • Connections
+ *   • Notifications
+ *   • Groups
+ *   • Dashboard intelligence
+ *   • Platform statistics
+ *
+ * Designed for:
+ *   Nexus Connect 2030
+ *   Professional network
+ *   Service marketplace
+ *   Verified business ecosystem
+ *   Real-time communication
+ *
+ * IMPORTANT:
+ * This file contains backend/business logic.
+ * Visual UI belongs to the frontend files.
+ * ================================================================
+ */
+
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
@@ -16,62 +64,40 @@ const {
 const config = require('./config');
 
 
-/**
- * ============================================================
- * NEXUS CONNECT — SERVICE LAYER
- * ============================================================
- *
- * Responsibilities:
- * - Database connection management
- * - Authentication
- * - User registration
- * - PIN security
- * - Login
- * - JWT session generation
- * - User profiles
- * - Private conversations
- * - Messaging
- * - Groups
- * - Connections
- * - Notifications
- *
- * Routes should remain thin.
- * Database structure belongs in models.js.
- * Real-time events belong in sockets.js.
- * ============================================================
- */
-
-
-/* ============================================================
-   ERROR CLASS
-============================================================ */
+/* ================================================================
+   01. APPLICATION ERROR
+================================================================ */
 
 class AppError extends Error {
-  constructor(message, statusCode = 500, code = 'INTERNAL_ERROR') {
+  constructor(
+    message,
+    statusCode = 500,
+    code = 'INTERNAL_ERROR',
+    details = null
+  ) {
     super(message);
 
     this.name = 'AppError';
     this.statusCode = statusCode;
     this.code = code;
+    this.details = details;
 
-    Error.captureStackTrace(this, this.constructor);
+    Error.captureStackTrace(
+      this,
+      this.constructor
+    );
   }
 }
 
 
-/* ============================================================
-   DATABASE CONNECTION SERVICES
-============================================================ */
+/* ================================================================
+   02. CONFIGURATION HELPERS
+================================================================ */
 
-/**
- * Get the configured MongoDB connection string.
- *
- * Supports several possible config structures so the service
- * remains compatible with the current Nexus configuration.
- */
 function getDatabaseUrl() {
   return (
     process.env.DATABASE_URL ||
+    process.env.MONGODB_URI ||
     config.databaseUrl ||
     config.database?.url ||
     config.database?.uri ||
@@ -82,98 +108,123 @@ function getDatabaseUrl() {
 }
 
 
-/**
- * Connect to MongoDB.
- *
- * This function is called by server.js before the HTTP server
- * starts accepting requests.
- */
+function getJWTSecret() {
+  return (
+    process.env.JWT_SECRET ||
+    config.jwtSecret ||
+    config.jwt?.secret ||
+    null
+  );
+}
+
+
+function getJWTExpiry() {
+  return (
+    process.env.JWT_EXPIRES_IN ||
+    config.jwtExpiresIn ||
+    config.jwt?.expiresIn ||
+    '7d'
+  );
+}
+
+
+function getSaltRounds() {
+  return (
+    Number(
+      process.env.BCRYPT_SALT_ROUNDS ||
+      config.bcryptSaltRounds ||
+      config.security?.bcryptSaltRounds
+    ) || 12
+  );
+}
+
+
+/* ================================================================
+   03. DATABASE ENGINE
+================================================================ */
+
 async function connectDatabase() {
-  const databaseUrl = getDatabaseUrl();
+  const databaseUrl =
+    getDatabaseUrl();
 
   if (!databaseUrl) {
     throw new AppError(
-      'DATABASE_URL is not configured.',
+      'MongoDB connection is not configured.',
       500,
       'DATABASE_CONFIGURATION_ERROR'
     );
   }
 
-  /**
-   * 0 = disconnected
-   * 1 = connected
-   * 2 = connecting
-   * 3 = disconnecting
-   */
-
-  if (mongoose.connection.readyState === 1) {
-    console.log(
-      '[NEXUS] MongoDB connection is already active.'
-    );
-
+  if (
+    mongoose.connection.readyState === 1
+  ) {
     return mongoose.connection;
   }
 
-  mongoose.set('strictQuery', true);
+  mongoose.set(
+    'strictQuery',
+    true
+  );
 
-  await mongoose.connect(databaseUrl, {
-    serverSelectionTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
-    maxPoolSize: 10,
-    minPoolSize: 0,
-  });
+  mongoose.set(
+    'sanitizeFilter',
+    true
+  );
+
+  await mongoose.connect(
+    databaseUrl,
+    {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+
+      maxPoolSize:
+        Number(
+          process.env.MONGO_MAX_POOL_SIZE
+        ) || 20,
+
+      minPoolSize:
+        Number(
+          process.env.MONGO_MIN_POOL_SIZE
+        ) || 2,
+
+      retryWrites: true,
+    }
+  );
 
   console.log(
-    `[NEXUS] MongoDB connected: ${mongoose.connection.name}`
+    `[NEXUS DATABASE] Connected to ${mongoose.connection.name}`
   );
 
   return mongoose.connection;
 }
 
 
-/**
- * Disconnect from MongoDB.
- *
- * Used during graceful application shutdown.
- */
 async function disconnectDatabase() {
   if (
     mongoose.connection.readyState === 0
   ) {
-    console.log(
-      '[NEXUS] MongoDB is already disconnected.'
-    );
-
     return;
   }
 
   await mongoose.disconnect();
 
   console.log(
-    '[NEXUS] MongoDB connection closed.'
+    '[NEXUS DATABASE] Connection closed.'
   );
 }
 
 
-/**
- * Check whether MongoDB is ready.
- *
- * Used by:
- *
- *     GET /ready
- */
 async function isDatabaseReady() {
-  return mongoose.connection.readyState === 1;
+  return (
+    mongoose.connection.readyState === 1
+  );
 }
 
 
-/* ============================================================
-   UTILITY FUNCTIONS
-============================================================ */
+/* ================================================================
+   04. NORMALIZATION
+================================================================ */
 
-/**
- * Normalize email addresses.
- */
 function normalizeEmail(email) {
   return String(email || '')
     .trim()
@@ -181,11 +232,6 @@ function normalizeEmail(email) {
 }
 
 
-/**
- * Normalize usernames.
- *
- * Usernames become lowercase internally.
- */
 function normalizeUsername(username) {
   return String(username || '')
     .trim()
@@ -194,36 +240,25 @@ function normalizeUsername(username) {
 }
 
 
-/**
- * Validate Nexus username.
- */
-function validateUsername(username) {
-  const normalized = normalizeUsername(username);
-
-  const usernamePattern = /^[a-z0-9_]{3,30}$/;
-
-  if (!usernamePattern.test(normalized)) {
-    throw new AppError(
-      'Username must contain 3–30 characters using letters, numbers, or underscores only.',
-      400,
-      'INVALID_USERNAME'
-    );
-  }
-
-  return normalized;
+function normalizeText(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
 
-/**
- * Validate email.
- */
-function validateEmail(email) {
-  const normalized = normalizeEmail(email);
+/* ================================================================
+   05. VALIDATION
+================================================================ */
 
-  const emailPattern =
+function validateEmail(email) {
+  const value =
+    normalizeEmail(email);
+
+  const pattern =
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  if (!emailPattern.test(normalized)) {
+  if (!pattern.test(value)) {
     throw new AppError(
       'Please provide a valid email address.',
       400,
@@ -231,17 +266,34 @@ function validateEmail(email) {
     );
   }
 
-  return normalized;
+  return value;
 }
 
 
-/**
- * Validate 4-digit Nexus PIN.
- */
-function validatePin(pin) {
-  const normalized = String(pin || '').trim();
+function validateUsername(username) {
+  const value =
+    normalizeUsername(username);
 
-  if (!/^\d{4}$/.test(normalized)) {
+  const pattern =
+    /^[a-z0-9_]{3,30}$/;
+
+  if (!pattern.test(value)) {
+    throw new AppError(
+      'Username must contain 3–30 letters, numbers, or underscores.',
+      400,
+      'INVALID_USERNAME'
+    );
+  }
+
+  return value;
+}
+
+
+function validatePin(pin) {
+  const value =
+    String(pin || '').trim();
+
+  if (!/^\d{4}$/.test(value)) {
     throw new AppError(
       'PIN must contain exactly 4 digits.',
       400,
@@ -249,49 +301,87 @@ function validatePin(pin) {
     );
   }
 
-  return normalized;
+  return value;
 }
 
 
-/**
- * Create a secure JWT session token.
- */
-function generateToken(userId) {
-  const jwtSecret =
-    config.jwtSecret ||
-    config.jwt?.secret ||
-    process.env.JWT_SECRET;
+function validateDisplayName(name) {
+  const value =
+    normalizeText(name);
 
-  if (!jwtSecret) {
+  if (
+    value.length < 2 ||
+    value.length > 60
+  ) {
     throw new AppError(
-      'Server authentication configuration is incomplete.',
+      'Display name must contain between 2 and 60 characters.',
+      400,
+      'INVALID_DISPLAY_NAME'
+    );
+  }
+
+  return value;
+}
+
+
+/* ================================================================
+   06. SECURITY
+================================================================ */
+
+function generateToken(userId) {
+  const secret =
+    getJWTSecret();
+
+  if (!secret) {
+    throw new AppError(
+      'JWT authentication is not configured.',
       500,
       'AUTH_CONFIGURATION_ERROR'
     );
   }
 
-  const expiresIn =
-    config.jwtExpiresIn ||
-    config.jwt?.expiresIn ||
-    process.env.JWT_EXPIRES_IN ||
-    '7d';
-
   return jwt.sign(
     {
       sub: String(userId),
       type: 'access',
+      platform: 'nexus-connect',
     },
-    jwtSecret,
+    secret,
     {
-      expiresIn,
+      expiresIn:
+        getJWTExpiry(),
     }
   );
 }
 
 
-/**
- * Remove sensitive information before returning user data.
- */
+async function comparePin(
+  pin,
+  pinHash
+) {
+  if (!pinHash) {
+    return false;
+  }
+
+  return bcrypt.compare(
+    validatePin(pin),
+    pinHash
+  );
+}
+
+
+async function hashPin(pin) {
+  return bcrypt.hash(
+    validatePin(pin),
+    getSaltRounds()
+  );
+}
+
+
+/* ================================================================
+   07. USER SANITIZATION
+================================================================ */
+
 function sanitizeUser(user) {
   if (!user) {
     return null;
@@ -300,42 +390,60 @@ function sanitizeUser(user) {
   const source =
     typeof user.toObject === 'function'
       ? user.toObject()
-      : { ...user };
+      : {
+          ...user,
+        };
 
   delete source.pinHash;
+  delete source.password;
+  delete source.passwordHash;
   delete source.__v;
 
   return source;
 }
 
 
-/**
- * Create consistent public user data.
- */
 function getPublicUser(user) {
   if (!user) {
     return null;
   }
 
   return {
-    id: String(user._id || user.id),
-    username: user.username,
-    displayName: user.displayName,
-    avatar: user.avatar || null,
-    bio: user.bio || '',
-    status: user.status || 'offline',
-    customStatus: user.customStatus || '',
+    id: String(
+      user._id || user.id
+    ),
+
+    username:
+      user.username || '',
+
+    displayName:
+      user.displayName || '',
+
+    avatar:
+      user.avatar || null,
+
+    bio:
+      user.bio || '',
+
+    status:
+      user.status || 'offline',
+
+    customStatus:
+      user.customStatus || '',
+
+    verified:
+      Boolean(
+        user.verified ||
+        user.isVerified
+      ),
   };
 }
 
 
-/* ============================================================
-   AUTHENTICATION SERVICES
-============================================================ */
+/* ================================================================
+   08. AUTHENTICATION
+================================================================ */
 
-/**
- * Register a new Nexus Connect user.
- */
 async function registerUser({
   email,
   username,
@@ -349,33 +457,20 @@ async function registerUser({
   const normalizedUsername =
     validateUsername(username);
 
-  const cleanDisplayName =
-    String(displayName || '').trim();
-
-  if (cleanDisplayName.length < 2) {
-    throw new AppError(
-      'Display name must contain at least 2 characters.',
-      400,
-      'INVALID_DISPLAY_NAME'
+  const cleanName =
+    validateDisplayName(
+      displayName
     );
-  }
 
-  if (cleanDisplayName.length > 60) {
-    throw new AppError(
-      'Display name cannot exceed 60 characters.',
-      400,
-      'INVALID_DISPLAY_NAME'
-    );
-  }
-
-  const validatedPin =
+  const validPin =
     validatePin(pin);
 
-  const validatedConfirmPin =
+  const validConfirmPin =
     validatePin(confirmPin);
 
   if (
-    validatedPin !== validatedConfirmPin
+    validPin !==
+    validConfirmPin
   ) {
     throw new AppError(
       'PIN confirmation does not match.',
@@ -384,12 +479,12 @@ async function registerUser({
     );
   }
 
-  const existingEmailUser =
+  const existingEmail =
     await User.findOne({
       email: normalizedEmail,
-    });
+    }).lean();
 
-  if (existingEmailUser) {
+  if (existingEmail) {
     throw new AppError(
       'An account with this email already exists.',
       409,
@@ -397,12 +492,13 @@ async function registerUser({
     );
   }
 
-  const existingUsernameUser =
+  const existingUsername =
     await User.findOne({
-      username: normalizedUsername,
-    });
+      username:
+        normalizedUsername,
+    }).lean();
 
-  if (existingUsernameUser) {
+  if (existingUsername) {
     throw new AppError(
       'This username is already taken.',
       409,
@@ -410,50 +506,56 @@ async function registerUser({
     );
   }
 
-  const saltRounds =
-    Number(
-      config.bcryptSaltRounds ||
-      config.security?.bcryptSaltRounds ||
-      process.env.BCRYPT_SALT_ROUNDS
-    ) || 12;
-
   const pinHash =
-    await bcrypt.hash(
-      validatedPin,
-      saltRounds
-    );
+    await hashPin(validPin);
 
   const user =
     await User.create({
-      email: normalizedEmail,
-      username: normalizedUsername,
-      displayName: cleanDisplayName,
+      email:
+        normalizedEmail,
+
+      username:
+        normalizedUsername,
+
+      displayName:
+        cleanName,
+
       pinHash,
-      status: 'online',
-      lastSeenAt: new Date(),
+
+      status:
+        'online',
+
+      lastSeenAt:
+        new Date(),
     });
 
   const token =
-    generateToken(user._id);
+    generateToken(
+      user._id
+    );
 
   return {
+    success: true,
+
     message:
       'Nexus Connect account created successfully.',
+
     token,
-    user: sanitizeUser(user),
+
+    user:
+      sanitizeUser(user),
   };
 }
 
 
-/**
- * Login using username/email + 4-digit PIN.
- */
 async function loginUser({
   identifier,
   pin,
 }) {
   const cleanIdentifier =
-    String(identifier || '').trim();
+    normalizeText(
+      identifier
+    );
 
   if (!cleanIdentifier) {
     throw new AppError(
@@ -463,22 +565,20 @@ async function loginUser({
     );
   }
 
-  const validatedPin =
-    validatePin(pin);
-
-  const normalizedIdentifier =
+  const normalized =
     cleanIdentifier.toLowerCase();
 
   const user =
     await User.findOne({
       $or: [
         {
-          email: normalizedIdentifier,
+          email: normalized,
         },
+
         {
           username:
             normalizeUsername(
-              normalizedIdentifier
+              normalized
             ),
         },
       ],
@@ -492,13 +592,13 @@ async function loginUser({
     );
   }
 
-  const pinMatches =
-    await bcrypt.compare(
-      validatedPin,
+  const valid =
+    await comparePin(
+      pin,
       user.pinHash
     );
 
-  if (!pinMatches) {
+  if (!valid) {
     throw new AppError(
       'Invalid username, email, or PIN.',
       401,
@@ -506,29 +606,38 @@ async function loginUser({
     );
   }
 
-  user.status = 'online';
-  user.lastSeenAt = new Date();
+  user.status =
+    'online';
+
+  user.lastSeenAt =
+    new Date();
 
   await user.save();
 
-  const token =
-    generateToken(user._id);
-
   return {
+    success: true,
+
     message:
       'Login successful.',
-    token,
-    user: sanitizeUser(user),
+
+    token:
+      generateToken(
+        user._id
+      ),
+
+    user:
+      sanitizeUser(user),
   };
 }
 
 
-/**
- * Get the currently authenticated user.
- */
-async function getCurrentUser(userId) {
+async function getCurrentUser(
+  userId
+) {
   const user =
-    await User.findById(userId);
+    await User.findById(
+      userId
+    );
 
   if (!user) {
     throw new AppError(
@@ -538,24 +647,27 @@ async function getCurrentUser(userId) {
     );
   }
 
-  return sanitizeUser(user);
+  return sanitizeUser(
+    user
+  );
 }
 
 
-/* ============================================================
-   USER PROFILE SERVICES
-============================================================ */
+/* ================================================================
+   09. PROFILE ENGINE
+================================================================ */
 
-/**
- * Find a user by username.
- */
-async function getUserByUsername(username) {
-  const normalizedUsername =
-    normalizeUsername(username);
+async function getUserByUsername(
+  username
+) {
+  const normalized =
+    validateUsername(
+      username
+    );
 
   const user =
     await User.findOne({
-      username: normalizedUsername,
+      username: normalized,
     });
 
   if (!user) {
@@ -566,68 +678,12 @@ async function getUserByUsername(username) {
     );
   }
 
-  return getPublicUser(user);
-}
-
-
-/**
- * Search Nexus Connect users.
- */
-async function searchUsers(query, limit = 20) {
-  const cleanQuery =
-    String(query || '').trim();
-
-  if (!cleanQuery) {
-    return [];
-  }
-
-  const safeLimit =
-    Math.min(
-      Math.max(
-        Number(limit) || 20,
-        1
-      ),
-      50
-    );
-
-  const escapedQuery =
-    cleanQuery.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      '\\$&'
-    );
-
-  const regex =
-    new RegExp(
-      escapedQuery,
-      'i'
-    );
-
-  const users =
-    await User.find({
-      $or: [
-        {
-          username: regex,
-        },
-        {
-          displayName: regex,
-        },
-      ],
-    })
-      .limit(safeLimit)
-      .select(
-        'username displayName avatar bio status customStatus'
-      )
-      .lean();
-
-  return users.map(
-    getPublicUser
+  return getPublicUser(
+    user
   );
 }
 
 
-/**
- * Update the authenticated user's profile.
- */
 async function updateProfile(
   userId,
   {
@@ -635,10 +691,12 @@ async function updateProfile(
     bio,
     avatar,
     customStatus,
-  }
+  } = {}
 ) {
   const user =
-    await User.findById(userId);
+    await User.findById(
+      userId
+    );
 
   if (!user) {
     throw new AppError(
@@ -649,34 +707,26 @@ async function updateProfile(
   }
 
   if (
-    displayName !== undefined
+    displayName !==
+    undefined
   ) {
-    const cleanDisplayName =
-      String(displayName).trim();
-
-    if (
-      cleanDisplayName.length < 2 ||
-      cleanDisplayName.length > 60
-    ) {
-      throw new AppError(
-        'Display name must contain between 2 and 60 characters.',
-        400,
-        'INVALID_DISPLAY_NAME'
-      );
-    }
-
     user.displayName =
-      cleanDisplayName;
+      validateDisplayName(
+        displayName
+      );
   }
 
   if (
     bio !== undefined
   ) {
     const cleanBio =
-      String(bio).trim();
+      normalizeText(
+        bio
+      );
 
     if (
-      cleanBio.length > 500
+      cleanBio.length >
+      500
     ) {
       throw new AppError(
         'Bio cannot exceed 500 characters.',
@@ -693,18 +743,23 @@ async function updateProfile(
     avatar !== undefined
   ) {
     user.avatar =
-      String(avatar || '').trim() ||
-      null;
+      normalizeText(
+        avatar
+      ) || null;
   }
 
   if (
-    customStatus !== undefined
+    customStatus !==
+    undefined
   ) {
-    const cleanStatus =
-      String(customStatus).trim();
+    const status =
+      normalizeText(
+        customStatus
+      );
 
     if (
-      cleanStatus.length > 100
+      status.length >
+      100
     ) {
       throw new AppError(
         'Custom status cannot exceed 100 characters.',
@@ -714,22 +769,139 @@ async function updateProfile(
     }
 
     user.customStatus =
-      cleanStatus;
+      status;
   }
 
   await user.save();
 
-  return sanitizeUser(user);
+  return sanitizeUser(
+    user
+  );
 }
 
 
-/* ============================================================
-   PRIVATE CONVERSATION SERVICES
-============================================================ */
+/* ================================================================
+   10. PROFESSIONAL DISCOVERY
+================================================================ */
+
+async function searchUsers(
+  query,
+  limit = 20
+) {
+  const cleanQuery =
+    normalizeText(
+      query
+    );
+
+  if (!cleanQuery) {
+    return [];
+  }
+
+  const safeLimit =
+    Math.min(
+      Math.max(
+        Number(limit) || 20,
+        1
+      ),
+      50
+    );
+
+  const escaped =
+    cleanQuery.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&'
+    );
+
+  const regex =
+    new RegExp(
+      escaped,
+      'i'
+    );
+
+  const users =
+    await User.find({
+      $or: [
+        {
+          username:
+            regex,
+        },
+
+        {
+          displayName:
+            regex,
+        },
+
+        {
+          bio:
+            regex,
+        },
+      ],
+    })
+      .select(
+        'username displayName avatar bio status customStatus verified isVerified'
+      )
+      .limit(
+        safeLimit
+      )
+      .lean();
+
+  return users.map(
+    getPublicUser
+  );
+}
+
 
 /**
- * Create or retrieve a private conversation.
+ * Advanced discovery response.
+ *
+ * This gives the frontend a richer structure than simply
+ * returning an array of users.
  */
+async function discoverProfessionals(
+  query,
+  options = {}
+) {
+  const {
+    limit = 20,
+  } = options;
+
+  const results =
+    await searchUsers(
+      query,
+      limit
+    );
+
+  return {
+    success: true,
+
+    query:
+      normalizeText(
+        query
+      ),
+
+    count:
+      results.length,
+
+    results,
+
+    meta: {
+      engine:
+        'Nexus Discovery Engine',
+
+      version:
+        '2030.1',
+
+      source:
+        'Nexus Network',
+    },
+  };
+}
+
+
+/* ================================================================
+   11. CONVERSATION ENGINE
+================================================================ */
+
 async function getOrCreateDirectConversation(
   userId,
   otherUserId
@@ -748,7 +920,7 @@ async function getOrCreateDirectConversation(
   const otherUser =
     await User.findById(
       otherUserId
-    );
+    ).lean();
 
   if (!otherUser) {
     throw new AppError(
@@ -761,11 +933,13 @@ async function getOrCreateDirectConversation(
   let conversation =
     await Conversation.findOne({
       type: 'direct',
+
       participants: {
         $all: [
           userId,
           otherUserId,
         ],
+
         $size: 2,
       },
     });
@@ -774,10 +948,14 @@ async function getOrCreateDirectConversation(
     conversation =
       await Conversation.create({
         type: 'direct',
+
         participants: [
           userId,
           otherUserId,
         ],
+
+        lastMessageAt:
+          new Date(),
       });
   }
 
@@ -785,45 +963,44 @@ async function getOrCreateDirectConversation(
 }
 
 
-/**
- * Get all conversations belonging to a user.
- */
-async function getUserConversations(userId) {
-  const conversations =
-    await Conversation.find({
-      participants: userId,
+async function getUserConversations(
+  userId
+) {
+  return Conversation.find({
+    participants:
+      userId,
+  })
+    .populate(
+      'participants',
+      'username displayName avatar status customStatus verified'
+    )
+    .populate(
+      'lastMessage'
+    )
+    .sort({
+      updatedAt: -1,
     })
-      .populate(
-        'participants',
-        'username displayName avatar status customStatus'
-      )
-      .sort({
-        updatedAt: -1,
-      })
-      .lean();
-
-  return conversations;
+    .lean();
 }
 
 
-/* ============================================================
-   MESSAGE SERVICES
-============================================================ */
+/* ================================================================
+   12. MESSAGE ENGINE
+================================================================ */
 
-/**
- * Send a text message.
- */
 async function sendMessage(
   userId,
   {
     conversationId,
     content,
-    replyTo,
+    replyTo = null,
     type = 'text',
   }
 ) {
   const cleanContent =
-    String(content || '').trim();
+    normalizeText(
+      content
+    );
 
   if (
     type === 'text' &&
@@ -849,16 +1026,16 @@ async function sendMessage(
     );
   }
 
-  const isParticipant =
+  const participant =
     conversation.participants.some(
-      participant =>
-        String(participant) ===
+      id =>
+        String(id) ===
         String(userId)
     );
 
-  if (!isParticipant) {
+  if (!participant) {
     throw new AppError(
-      'You do not have permission to send messages in this conversation.',
+      'Conversation access denied.',
       403,
       'CONVERSATION_ACCESS_DENIED'
     );
@@ -866,19 +1043,30 @@ async function sendMessage(
 
   const message =
     await Message.create({
-      conversation: conversationId,
-      sender: userId,
-      content: cleanContent,
+      conversation:
+        conversationId,
+
+      sender:
+        userId,
+
+      content:
+        cleanContent,
+
       type,
-      replyTo:
-        replyTo || null,
+
+      replyTo,
+
       deliveredTo: [
         userId,
       ],
+
       readBy: [
         {
-          user: userId,
-          readAt: new Date(),
+          user:
+            userId,
+
+          readAt:
+            new Date(),
         },
       ],
     });
@@ -900,15 +1088,12 @@ async function sendMessage(
 }
 
 
-/**
- * Get messages inside a conversation.
- */
 async function getConversationMessages(
   userId,
   conversationId,
   {
     limit = 50,
-    before,
+    before = null,
   } = {}
 ) {
   const conversation =
@@ -924,16 +1109,16 @@ async function getConversationMessages(
     );
   }
 
-  const isParticipant =
+  const allowed =
     conversation.participants.some(
-      participant =>
-        String(participant) ===
+      id =>
+        String(id) ===
         String(userId)
     );
 
-  if (!isParticipant) {
+  if (!allowed) {
     throw new AppError(
-      'You do not have permission to view this conversation.',
+      'Conversation access denied.',
       403,
       'CONVERSATION_ACCESS_DENIED'
     );
@@ -949,18 +1134,32 @@ async function getConversationMessages(
     );
 
   const query = {
-    conversation: conversationId,
-    deletedAt: null,
+    conversation:
+      conversationId,
+
+    deletedAt:
+      null,
   };
 
   if (before) {
-    query.createdAt = {
-      $lt: new Date(before),
-    };
+    const date =
+      new Date(before);
+
+    if (
+      !Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      query.createdAt = {
+        $lt: date,
+      };
+    }
   }
 
   const messages =
-    await Message.find(query)
+    await Message.find(
+      query
+    )
       .populate(
         'sender',
         'username displayName avatar'
@@ -971,20 +1170,19 @@ async function getConversationMessages(
       .sort({
         createdAt: -1,
       })
-      .limit(safeLimit)
+      .limit(
+        safeLimit
+      )
       .lean();
 
   return messages.reverse();
 }
 
 
-/* ============================================================
-   CONNECTION SERVICES
-============================================================ */
+/* ================================================================
+   13. CONNECTION ENGINE
+================================================================ */
 
-/**
- * Send a connection request.
- */
 async function sendConnectionRequest(
   requesterId,
   recipientId
@@ -994,7 +1192,7 @@ async function sendConnectionRequest(
     String(recipientId)
   ) {
     throw new AppError(
-      'You cannot send a connection request to yourself.',
+      'You cannot connect with yourself.',
       400,
       'INVALID_CONNECTION_REQUEST'
     );
@@ -1003,7 +1201,7 @@ async function sendConnectionRequest(
   const recipient =
     await User.findById(
       recipientId
-    );
+    ).lean();
 
   if (!recipient) {
     throw new AppError(
@@ -1017,12 +1215,19 @@ async function sendConnectionRequest(
     await Connection.findOne({
       $or: [
         {
-          requester: requesterId,
-          recipient: recipientId,
+          requester:
+            requesterId,
+
+          recipient:
+            recipientId,
         },
+
         {
-          requester: recipientId,
-          recipient: requesterId,
+          requester:
+            recipientId,
+
+          recipient:
+            requesterId,
         },
       ],
     });
@@ -1037,25 +1242,34 @@ async function sendConnectionRequest(
 
   const connection =
     await Connection.create({
-      requester: requesterId,
-      recipient: recipientId,
-      status: 'pending',
+      requester:
+        requesterId,
+
+      recipient:
+        recipientId,
+
+      status:
+        'pending',
     });
 
   await Notification.create({
-    user: recipientId,
-    actor: requesterId,
-    type: 'connection_request',
-    connection: connection._id,
+    user:
+      recipientId,
+
+    actor:
+      requesterId,
+
+    type:
+      'connection_request',
+
+    connection:
+      connection._id,
   });
 
   return connection;
 }
 
 
-/**
- * Accept a connection request.
- */
 async function acceptConnectionRequest(
   userId,
   connectionId
@@ -1074,11 +1288,13 @@ async function acceptConnectionRequest(
   }
 
   if (
-    String(connection.recipient) !==
+    String(
+      connection.recipient
+    ) !==
     String(userId)
   ) {
     throw new AppError(
-      'You cannot accept this connection request.',
+      'You cannot accept this request.',
       403,
       'CONNECTION_ACCESS_DENIED'
     );
@@ -1096,13 +1312,75 @@ async function acceptConnectionRequest(
 }
 
 
-/* ============================================================
-   NOTIFICATION SERVICES
-============================================================ */
+/* ================================================================
+   14. CONNECTION DISCOVERY
+================================================================ */
 
-/**
- * Get notifications for a user.
- */
+async function getUserConnections(
+  userId
+) {
+  const connections =
+    await Connection.find({
+      $or: [
+        {
+          requester:
+            userId,
+        },
+
+        {
+          recipient:
+            userId,
+        },
+      ],
+
+      status:
+        'accepted',
+    })
+      .populate(
+        'requester',
+        'username displayName avatar status customStatus'
+      )
+      .populate(
+        'recipient',
+        'username displayName avatar status customStatus'
+      )
+      .sort({
+        updatedAt: -1,
+      })
+      .lean();
+
+  return connections.map(
+    connection => {
+      const other =
+        String(
+          connection.requester?._id
+        ) ===
+        String(userId)
+          ? connection.recipient
+          : connection.requester;
+
+      return {
+        id:
+          connection._id,
+
+        user:
+          getPublicUser(
+            other
+          ),
+
+        connectedAt:
+          connection.respondedAt ||
+          connection.updatedAt,
+      };
+    }
+  );
+}
+
+
+/* ================================================================
+   15. NOTIFICATION ENGINE
+================================================================ */
+
 async function getNotifications(
   userId,
   {
@@ -1120,14 +1398,18 @@ async function getNotifications(
     );
 
   const query = {
-    user: userId,
+    user:
+      userId,
   };
 
   if (unreadOnly) {
-    query.readAt = null;
+    query.readAt =
+      null;
   }
 
-  return Notification.find(query)
+  return Notification.find(
+    query
+  )
     .populate(
       'actor',
       'username displayName avatar'
@@ -1135,22 +1417,37 @@ async function getNotifications(
     .sort({
       createdAt: -1,
     })
-    .limit(safeLimit)
+    .limit(
+      safeLimit
+    )
     .lean();
 }
 
 
-/**
- * Mark a notification as read.
- */
+async function getUnreadNotificationCount(
+  userId
+) {
+  return Notification.countDocuments({
+    user:
+      userId,
+
+    readAt:
+      null,
+  });
+}
+
+
 async function markNotificationAsRead(
   userId,
   notificationId
 ) {
   const notification =
     await Notification.findOne({
-      _id: notificationId,
-      user: userId,
+      _id:
+        notificationId,
+
+      user:
+        userId,
     });
 
   if (!notification) {
@@ -1172,13 +1469,10 @@ async function markNotificationAsRead(
 }
 
 
-/* ============================================================
-   GROUP SERVICES — FOUNDATION
-============================================================ */
+/* ================================================================
+   16. GROUP ENGINE
+================================================================ */
 
-/**
- * Create a Nexus Connect group.
- */
 async function createGroup(
   userId,
   {
@@ -1186,10 +1480,12 @@ async function createGroup(
     description = '',
     privacy = 'private',
     memberIds = [],
-  }
+  } = {}
 ) {
   const cleanName =
-    String(name || '').trim();
+    normalizeText(
+      name
+    );
 
   if (
     cleanName.length < 3 ||
@@ -1203,10 +1499,13 @@ async function createGroup(
   }
 
   const cleanDescription =
-    String(description || '').trim();
+    normalizeText(
+      description
+    );
 
   if (
-    cleanDescription.length > 1000
+    cleanDescription.length >
+    1000
   ) {
     throw new AppError(
       'Group description cannot exceed 1000 characters.',
@@ -1215,14 +1514,11 @@ async function createGroup(
     );
   }
 
-  const allowedPrivacy =
-    [
+  if (
+    ![
       'private',
       'public',
-    ];
-
-  if (
-    !allowedPrivacy.includes(
+    ].includes(
       privacy
     )
   ) {
@@ -1233,13 +1529,20 @@ async function createGroup(
     );
   }
 
+  const members =
+    [
+      userId,
+      ...Array.isArray(
+        memberIds
+      )
+        ? memberIds
+        : [],
+    ];
+
   const uniqueMembers =
     [
       ...new Set(
-        [
-          userId,
-          ...memberIds,
-        ].map(
+        members.map(
           String
         )
       ),
@@ -1247,18 +1550,27 @@ async function createGroup(
 
   const group =
     await Group.create({
-      name: cleanName,
-      description: cleanDescription,
+      name:
+        cleanName,
+
+      description:
+        cleanDescription,
+
       privacy,
-      owner: userId,
+
+      owner:
+        userId,
 
       members:
         uniqueMembers.map(
           memberId => ({
-            user: memberId,
+            user:
+              memberId,
 
             role:
-              String(memberId) ===
+              String(
+                memberId
+              ) ===
               String(userId)
                 ? 'owner'
                 : 'member',
@@ -1273,77 +1585,315 @@ async function createGroup(
 }
 
 
-/* ============================================================
-   EXPORTS
-============================================================ */
+/* ================================================================
+   17. DASHBOARD INTELLIGENCE
+================================================================ */
+
+/**
+ * Generates a compact data package for the Nexus frontend.
+ *
+ * This is useful for an advanced dashboard because the frontend
+ * can request one endpoint instead of making many separate calls.
+ */
+async function getDashboardData(
+  userId
+) {
+  const [
+    user,
+    connections,
+    notifications,
+    unreadNotifications,
+    conversations,
+  ] = await Promise.all([
+    getCurrentUser(
+      userId
+    ),
+
+    getUserConnections(
+      userId
+    ),
+
+    getNotifications(
+      userId,
+      {
+        limit: 8,
+      }
+    ),
+
+    getUnreadNotificationCount(
+      userId
+    ),
+
+    getUserConversations(
+      userId
+    ),
+  ]);
+
+  return {
+    success:
+      true,
+
+    user,
+
+    overview: {
+      connections:
+        connections.length,
+
+      conversations:
+        conversations.length,
+
+      notifications:
+        notifications.length,
+
+      unreadNotifications,
+    },
+
+    connections:
+      connections.slice(
+        0,
+        8
+      ),
+
+    notifications,
+
+    conversations:
+      conversations.slice(
+        0,
+        8
+      ),
+
+    platform: {
+      name:
+        'Nexus Connect',
+
+      version:
+        '2030.1',
+
+      status:
+        'operational',
+    },
+  };
+}
+
+
+/* ================================================================
+   18. PLATFORM STATISTICS
+================================================================ */
+
+async function getPlatformStatistics() {
+  const [
+    users,
+    connections,
+    conversations,
+    messages,
+    groups,
+  ] = await Promise.all([
+    User.countDocuments(),
+
+    Connection.countDocuments({
+      status:
+        'accepted',
+    }),
+
+    Conversation.countDocuments(),
+
+    Message.countDocuments(),
+
+    Group.countDocuments(),
+  ]);
+
+  return {
+    success:
+      true,
+
+    statistics: {
+      users,
+      verifiedConnections:
+        connections,
+
+      conversations,
+      messages,
+      groups,
+    },
+
+    platform: {
+      name:
+        'Nexus Connect',
+
+      generation:
+        '2030',
+
+      status:
+        'operational',
+    },
+  };
+}
+
+
+/* ================================================================
+   19. ONLINE PRESENCE
+================================================================ */
+
+async function setUserOnline(
+  userId
+) {
+  return User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        status:
+          'online',
+
+        lastSeenAt:
+          new Date(),
+      },
+    },
+    {
+      new: true,
+    }
+  );
+}
+
+
+async function setUserOffline(
+  userId
+) {
+  return User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        status:
+          'offline',
+
+        lastSeenAt:
+          new Date(),
+      },
+    },
+    {
+      new: true,
+    }
+  );
+}
+
+
+/* ================================================================
+   20. HEALTH INFORMATION
+================================================================ */
+
+async function getSystemHealth() {
+  const database =
+    await isDatabaseReady();
+
+  return {
+    status:
+      database
+        ? 'operational'
+        : 'degraded',
+
+    database:
+      database
+        ? 'connected'
+        : 'disconnected',
+
+    service:
+      'Nexus Connect Service Engine',
+
+    version:
+      '2030.1',
+
+    timestamp:
+      new Date().toISOString(),
+  };
+}
+
+
+/* ================================================================
+   21. EXPORTS
+================================================================ */
 
 module.exports = {
 
   /* DATABASE */
-
   connectDatabase,
   disconnectDatabase,
   isDatabaseReady,
 
-
-  /* ERROR */
-
+  /* ERRORS */
   AppError,
 
+  /* CONFIG */
+  getDatabaseUrl,
+  getJWTSecret,
+  getJWTExpiry,
 
-  /* UTILITIES */
-
+  /* NORMALIZATION */
   normalizeEmail,
   normalizeUsername,
+  normalizeText,
 
+  /* VALIDATION */
   validateEmail,
   validateUsername,
   validatePin,
+  validateDisplayName,
 
+  /* SECURITY */
   generateToken,
+  comparePin,
+  hashPin,
+
+  /* USERS */
   sanitizeUser,
   getPublicUser,
-
-
-  /* AUTHENTICATION */
-
-  registerUser,
-  loginUser,
   getCurrentUser,
-
-
-  /* USER PROFILE */
-
   getUserByUsername,
-  searchUsers,
   updateProfile,
 
+  /* AUTH */
+  registerUser,
+  loginUser,
+
+  /* DISCOVERY */
+  searchUsers,
+  discoverProfessionals,
 
   /* CONVERSATIONS */
-
   getOrCreateDirectConversation,
   getUserConversations,
 
-
   /* MESSAGES */
-
   sendMessage,
   getConversationMessages,
 
-
   /* CONNECTIONS */
-
   sendConnectionRequest,
   acceptConnectionRequest,
-
+  getUserConnections,
 
   /* NOTIFICATIONS */
-
   getNotifications,
+  getUnreadNotificationCount,
   markNotificationAsRead,
 
-
   /* GROUPS */
-
   createGroup,
+
+  /* DASHBOARD */
+  getDashboardData,
+
+  /* PLATFORM */
+  getPlatformStatistics,
+
+  /* PRESENCE */
+  setUserOnline,
+  setUserOffline,
+
+  /* HEALTH */
+  getSystemHealth,
 };
+
+
+/* ================================================================
+   NEXUS CONNECT 2030
+   END OF SERVICE ENGINE
+================================================================ */
