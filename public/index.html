@@ -1,33 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
-    <!-- =========================================================
-         NEXUS CONNECT 2030
-         Nexus Buildsolutions Limited
-         ========================================================= -->
-
     <meta charset="UTF-8">
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0"
+        content="width=device-width, initial-scale=1, viewport-fit=cover"
+    >
+
+    <meta
+        name="theme-color"
+        content="#0b1020"
     >
 
     <meta
         name="description"
-        content="Nexus Connect by Nexus Buildsolutions Limited — a trusted professional network for discovering people, expertise, services, businesses and practical solutions."
-    >
-
-    <meta
-        name="author"
-        content="Nexus Buildsolutions Limited"
-    >
-
-    <meta
-        name="publisher"
-        content="Nexus Buildsolutions Limited"
+        content="Nexus Connect — communication, collaboration and professional networking."
     >
 
     <meta
@@ -35,1476 +23,737 @@
         content="Nexus Connect"
     >
 
-    <meta
-        name="theme-color"
-        content="#071A33"
-    >
+    <title>Nexus Connect</title>
 
-    <meta
-        name="color-scheme"
-        content="light"
-    >
-
-    <!-- =========================================================
-         SOCIAL / SHARING METADATA
-         ========================================================= -->
-
-    <meta
-        property="og:title"
-        content="Nexus Connect | Nexus Buildsolutions Limited"
-    >
-
-    <meta
-        property="og:description"
-        content="Find the right person. Find the right solution."
-    >
-
-    <meta
-        property="og:type"
-        content="website"
-    >
-
-    <meta
-        property="og:site_name"
-        content="Nexus Connect"
-    >
-
-    <!-- =========================================================
-         TITLE
-         ========================================================= -->
-
-    <title>
-        Nexus Connect | Nexus Buildsolutions Limited
-    </title>
-
-    <!-- =========================================================
-         OFFICIAL BRAND ASSET
-         
-         IMPORTANT:
-         Keep this path consistent with:
-         public/assets/logo/
-         
-         Recommended production filename:
-         nexus-buildsolutions-logo.png
-         
-         Current uploaded filename:
-         Screenshot 2025-09-29 122409.png
-         ========================================================= -->
-
-    <link
-        rel="icon"
-        type="image/png"
-        href="/assets/logo/Screenshot%202025-09-29%20122409.png"
-    >
-
-    <link
-        rel="apple-touch-icon"
-        href="/assets/logo/Screenshot%202025-09-29%20122409.png"
-    >
-
-    <!-- =========================================================
-         STYLESHEET
-         ========================================================= -->
-
-    <link
-        rel="stylesheet"
-        href="./css/app.css"
-    >
-
+    <link rel="stylesheet" href="/css/app.css">
 </head>
-
 
 <body>
 
-    <!-- =========================================================
-         SKIP LINK
-         Accessibility / keyboard navigation
-         ========================================================= -->
-
-    <a
-        class="nexus-skip-link"
-        href="#nexus-main"
-    >
-        Skip to main content
-    </a>
-
+<div id="app" class="app-shell">
 
     <!-- =========================================================
-         APPLICATION ROOT
-         ========================================================= -->
+         AUTHENTICATION
+    ========================================================== -->
 
-    <div
-        id="nexus-app"
-        class="nexus-app"
-    >
+    <section id="auth-screen" class="auth-screen" aria-label="Nexus Connect authentication">
 
+        <div class="auth-background"></div>
 
-        <!-- =====================================================
-             GLOBAL HEADER
-             ===================================================== -->
+        <div class="auth-container">
 
-        <header
-            id="nexus-header"
-            class="nexus-header"
-        >
-
-            <div
-                class="nexus-container nexus-header__inner"
-            >
-
-
-                <!-- =================================================
-                     OFFICIAL NEXUS BRAND
-                     ================================================= -->
-
-                <a
-                    href="#home"
-                    class="nexus-brand"
-                    data-nexus-route="home"
-                    aria-label="Nexus Connect home"
-                >
-
-                    <div
-                        class="nexus-brand__logo-wrap"
-                    >
-
-                        <img
-                            src="/assets/logo/Screenshot%202025-09-29%20122409.png"
-                            alt="Nexus Buildsolutions Limited official logo"
-                            class="nexus-brand__logo"
-                            width="180"
-                            height="92"
-                            loading="eager"
-                            decoding="async"
-                        >
-
-                    </div>
-
-
-                    <div
-                        class="nexus-brand__identity"
-                    >
-
-                        <span
-                            class="nexus-brand__name"
-                        >
-                            NEXUS CONNECT
-                        </span>
-
-                        <span
-                            class="nexus-brand__company"
-                        >
-                            Nexus Buildsolutions Limited
-                        </span>
-
-                    </div>
-
-                </a>
-
-
-                <!-- =================================================
-                     DESKTOP NAVIGATION
-                     ================================================= -->
-
-                <nav
-                    class="nexus-navigation"
-                    aria-label="Primary navigation"
-                >
-
-                    <a
-                        href="#home"
-                        class="nexus-navigation__link is-active"
-                        data-nexus-route="home"
-                    >
-                        Home
-                    </a>
-
-                    <a
-                        href="#finder"
-                        class="nexus-navigation__link"
-                        data-nexus-route="finder"
-                    >
-                        Nexus Finder
-                    </a>
-
-                    <a
-                        href="#requests"
-                        class="nexus-navigation__link"
-                        data-nexus-route="requests"
-                    >
-                        Requests
-                    </a>
-
-                    <a
-                        href="#network"
-                        class="nexus-navigation__link"
-                        data-nexus-route="network"
-                    >
-                        Network
-                    </a>
-
-                </nav>
-
-
-                <!-- =================================================
-                     HEADER ACTIONS
-                     ================================================= -->
-
-                <div
-                    class="nexus-header__actions"
-                >
-
-
-                    <!-- =================================================
-                         NOTIFICATIONS
-                         ================================================= -->
-
-                    <button
-                        type="button"
-                        id="notification-button"
-                        class="nexus-icon-button"
-                        aria-label="Notifications"
-                        aria-haspopup="true"
-                        aria-expanded="false"
-                    >
-
-                        <span
-                            class="nexus-icon-button__symbol"
-                            aria-hidden="true"
-                        >
-                            ◌
-                        </span>
-
-                        <span
-                            id="notification-count"
-                            class="nexus-notification-count"
-                            hidden
-                        >
-                            0
-                        </span>
-
-                    </button>
-
-
-                    <!-- =================================================
-                         PROFILE
-                         ================================================= -->
-
-                    <button
-                        type="button"
-                        id="profile-button"
-                        class="nexus-profile-button"
-                        aria-label="Open profile menu"
-                        aria-haspopup="true"
-                        aria-expanded="false"
-                    >
-
-                        <span
-                            id="profile-avatar"
-                            class="nexus-profile-button__avatar"
-                            aria-hidden="true"
-                        >
-                            G
-                        </span>
-
-                        <span
-                            id="profile-name"
-                            class="nexus-profile-button__name"
-                        >
-                            Guest
-                        </span>
-
-                    </button>
-
-
-                    <!-- =================================================
-                         MOBILE MENU
-                         ================================================= -->
-
-                    <button
-                        type="button"
-                        id="mobile-menu-button"
-                        class="nexus-mobile-menu-button"
-                        aria-label="Open navigation menu"
-                        aria-expanded="false"
-                        aria-controls="mobile-navigation"
-                    >
-
-                        <span aria-hidden="true">
-                            ☰
-                        </span>
-
-                    </button>
-
+            <div class="brand-mark">
+                <div class="brand-symbol">N</div>
+                <div>
+                    <strong>NEXUS</strong>
+                    <span>CONNECT</span>
                 </div>
+            </div>
+
+            <!-- LOGIN -->
+
+            <div id="login-view" class="auth-card">
+
+                <div class="auth-heading">
+                    <span class="eyebrow">NEXUS CONNECT</span>
+                    <h1>Welcome back</h1>
+                    <p>Sign in securely to your Nexus network.</p>
+                </div>
+
+                <form id="login-form" novalidate>
+
+                    <label class="field">
+                        <span>Username or email</span>
+                        <input
+                            id="login-identifier"
+                            name="identifier"
+                            type="text"
+                            autocomplete="username"
+                            maxlength="120"
+                            placeholder="@username or email"
+                            required
+                        >
+                    </label>
+
+                    <label class="field">
+                        <span>4-digit PIN</span>
+
+                        <input
+                            id="login-pin"
+                            name="pin"
+                            type="password"
+                            inputmode="numeric"
+                            autocomplete="current-password"
+                            pattern="[0-9]{4}"
+                            maxlength="4"
+                            placeholder="••••"
+                            required
+                        >
+                    </label>
+
+                    <div id="login-error" class="form-message error" role="alert"></div>
+
+                    <button
+                        type="submit"
+                        class="primary-button full-width"
+                        id="login-submit"
+                    >
+                        <span>Continue</span>
+                    </button>
+
+                </form>
+
+                <div class="auth-divider">
+                    <span>New to Nexus Connect?</span>
+                </div>
+
+                <button
+                    type="button"
+                    class="secondary-button full-width"
+                    data-auth-view="register"
+                >
+                    Create Account
+                </button>
 
             </div>
 
+            <!-- REGISTER -->
 
-            <!-- =====================================================
-                 MOBILE NAVIGATION
-                 ===================================================== -->
+            <div id="register-view" class="auth-card hidden">
 
-            <nav
-                id="mobile-navigation"
-                class="nexus-mobile-navigation"
-                aria-label="Mobile navigation"
-                hidden
-            >
+                <div class="auth-heading">
+                    <span class="eyebrow">CREATE YOUR IDENTITY</span>
+                    <h1>Create your account</h1>
+                    <p>Your Nexus identity starts here.</p>
+                </div>
 
-                <a
-                    href="#home"
-                    class="nexus-navigation__link is-active"
-                    data-nexus-route="home"
+                <form id="register-form" novalidate>
+
+                    <label class="field">
+                        <span>Email</span>
+                        <input
+                            id="register-email"
+                            name="email"
+                            type="email"
+                            autocomplete="email"
+                            maxlength="254"
+                            placeholder="you@example.com"
+                            required
+                        >
+                    </label>
+
+                    <label class="field">
+                        <span>Username</span>
+                        <input
+                            id="register-username"
+                            name="username"
+                            type="text"
+                            autocomplete="username"
+                            maxlength="30"
+                            placeholder="yourusername"
+                            required
+                        >
+                        <small>3–30 characters. Letters, numbers and underscores.</small>
+                    </label>
+
+                    <label class="field">
+                        <span>Display name</span>
+                        <input
+                            id="register-display-name"
+                            name="displayName"
+                            type="text"
+                            autocomplete="name"
+                            maxlength="80"
+                            placeholder="Your name"
+                            required
+                        >
+                    </label>
+
+                    <div class="pin-grid">
+
+                        <label class="field">
+                            <span>Create PIN</span>
+                            <input
+                                id="register-pin"
+                                name="pin"
+                                type="password"
+                                inputmode="numeric"
+                                maxlength="4"
+                                pattern="[0-9]{4}"
+                                autocomplete="new-password"
+                                placeholder="••••"
+                                required
+                            >
+                        </label>
+
+                        <label class="field">
+                            <span>Confirm PIN</span>
+                            <input
+                                id="register-pin-confirm"
+                                name="pinConfirm"
+                                type="password"
+                                inputmode="numeric"
+                                maxlength="4"
+                                pattern="[0-9]{4}"
+                                autocomplete="new-password"
+                                placeholder="••••"
+                                required
+                            >
+                        </label>
+
+                    </div>
+
+                    <div id="register-error" class="form-message error" role="alert"></div>
+
+                    <button
+                        type="submit"
+                        class="primary-button full-width"
+                        id="register-submit"
+                    >
+                        Create Account
+                    </button>
+
+                </form>
+
+                <button
+                    type="button"
+                    class="text-button"
+                    data-auth-view="login"
                 >
-                    Home
-                </a>
+                    Already have an account? Sign in
+                </button>
 
-                <a
-                    href="#finder"
-                    class="nexus-navigation__link"
-                    data-nexus-route="finder"
-                >
-                    Nexus Finder
-                </a>
+            </div>
 
-                <a
-                    href="#requests"
-                    class="nexus-navigation__link"
-                    data-nexus-route="requests"
-                >
-                    Requests
-                </a>
+        </div>
+    </section>
 
-                <a
-                    href="#network"
-                    class="nexus-navigation__link"
-                    data-nexus-route="network"
-                >
-                    Network
-                </a>
+
+    <!-- =========================================================
+         MAIN APPLICATION
+    ========================================================== -->
+
+    <section id="main-app" class="main-app hidden">
+
+        <!-- Desktop sidebar -->
+
+        <aside id="sidebar" class="sidebar">
+
+            <div class="sidebar-brand">
+                <div class="brand-symbol small">N</div>
+                <div class="brand-name">
+                    <strong>NEXUS</strong>
+                    <span>CONNECT</span>
+                </div>
+            </div>
+
+            <nav class="main-navigation" aria-label="Main navigation">
+
+                <button class="nav-item active" data-view="home">
+                    <span class="nav-icon">⌂</span>
+                    <span>Home</span>
+                </button>
+
+                <button class="nav-item" data-view="messages">
+                    <span class="nav-icon">◌</span>
+                    <span>Messages</span>
+                    <span class="nav-badge hidden" id="message-badge">0</span>
+                </button>
+
+                <button class="nav-item" data-view="people">
+                    <span class="nav-icon">♧</span>
+                    <span>People</span>
+                </button>
+
+                <button class="nav-item" data-view="discover">
+                    <span class="nav-icon">◎</span>
+                    <span>Discover</span>
+                </button>
+
+                <button class="nav-item" data-view="groups">
+                    <span class="nav-icon">♧</span>
+                    <span>Communities</span>
+                </button>
+
+                <button class="nav-item" data-view="activity">
+                    <span class="nav-icon">◈</span>
+                    <span>Activity</span>
+                    <span class="nav-badge hidden" id="activity-badge">0</span>
+                </button>
+
+                <button class="nav-item" data-view="media">
+                    <span class="nav-icon">▣</span>
+                    <span>Media</span>
+                </button>
+
+                <button class="nav-item" data-view="ai">
+                    <span class="nav-icon">✦</span>
+                    <span>Nexus AI</span>
+                </button>
 
             </nav>
 
-        </header>
+            <div class="sidebar-section">
+
+                <button class="nav-item" data-view="saved">
+                    <span class="nav-icon">☆</span>
+                    <span>Saved</span>
+                </button>
+
+                <button class="nav-item" data-view="pinned">
+                    <span class="nav-icon">⌖</span>
+                    <span>Pinned</span>
+                </button>
+
+            </div>
+
+            <div class="sidebar-bottom">
+
+                <button class="nav-item" data-view="settings">
+                    <span class="nav-icon">⚙</span>
+                    <span>Settings</span>
+                </button>
+
+                <button class="nav-item" data-view="help">
+                    <span class="nav-icon">?</span>
+                    <span>Help</span>
+                </button>
+
+            </div>
+
+            <button id="profile-sidebar" class="profile-mini">
+
+                <div id="sidebar-avatar" class="avatar">N</div>
+
+                <div class="profile-mini-info">
+                    <strong id="sidebar-name">Nexus User</strong>
+                    <span>
+                        <i class="online-dot"></i>
+                        Online
+                    </span>
+                </div>
+
+            </button>
+
+        </aside>
 
 
-        <!-- =========================================================
-             MAIN APPLICATION
-             ========================================================= -->
+        <!-- Main content -->
 
-        <main
-            id="nexus-main"
-            class="nexus-main"
-        >
+        <main class="content-shell">
 
+            <header class="topbar">
 
-            <!-- =====================================================
-                 HERO / NEXUS FINDER
-                 ===================================================== -->
-
-            <section
-                id="home"
-                class="nexus-hero"
-                aria-labelledby="hero-title"
-            >
-
-                <div
-                    class="nexus-container nexus-hero__grid"
+                <button
+                    id="mobile-menu-button"
+                    class="icon-button mobile-only"
+                    aria-label="Open navigation"
                 >
+                    ☰
+                </button>
 
+                <div class="topbar-title">
+                    <strong>Nexus Connect</strong>
+                </div>
 
-                    <!-- =================================================
-                         HERO CONTENT
-                         ================================================= -->
+                <div class="topbar-actions">
 
-                    <div
-                        class="nexus-hero__content"
+                    <button
+                        id="search-button"
+                        class="icon-button"
+                        aria-label="Search"
                     >
+                        ⌕
+                    </button>
 
-
-                        <div
-                            class="nexus-status-badge"
-                        >
-
-                            <span
-                                class="nexus-status-badge__dot"
-                                aria-hidden="true"
-                            ></span>
-
-                            NEXUS CONNECT 2030
-
-                        </div>
-
-
-                        <h1
-                            id="hero-title"
-                            class="nexus-hero__title"
-                        >
-
-                            Find the right person.
-
-                            <span>
-                                Find the right solution.
-                            </span>
-
-                        </h1>
-
-
-                        <p
-                            class="nexus-hero__description"
-                        >
-
-                            A trusted professional network connecting
-                            people with Nexus staff, certified
-                            professionals, verified businesses and
-                            practical solutions.
-
-                        </p>
-
-
-                        <!-- =================================================
-                             SMART SEARCH
-                             ================================================= -->
-
-                        <form
-                            id="nexus-search-form"
-                            class="nexus-search"
-                            role="search"
-                            aria-label="Nexus Finder"
-                        >
-
-                            <div
-                                class="nexus-search__icon"
-                                aria-hidden="true"
-                            >
-                                ⌕
-                            </div>
-
-
-                            <input
-                                id="nexus-search-input"
-                                class="nexus-search__input"
-                                type="search"
-                                name="search"
-                                placeholder="What solution or professional are you looking for?"
-                                autocomplete="off"
-                                spellcheck="false"
-                                aria-label="Search Nexus Connect"
-                                aria-describedby="search-status"
-                            >
-
-
-                            <button
-                                type="submit"
-                                id="nexus-search-button"
-                                class="nexus-button nexus-button--primary"
-                            >
-                                Find Solutions
-                            </button>
-
-                        </form>
-
-
-                        <!-- =================================================
-                             QUICK SEARCH
-                             ================================================= -->
-
-                        <div
-                            class="nexus-quick-search"
-                            aria-label="Popular searches"
-                        >
-
-                            <span
-                                class="nexus-quick-search__label"
-                            >
-                                Try:
-                            </span>
-
-
-                            <button
-                                type="button"
-                                data-search-query="certified technician in Abuja"
-                            >
-                                Certified technician in Abuja
-                            </button>
-
-
-                            <button
-                                type="button"
-                                data-search-query="quantity surveyor"
-                            >
-                                Quantity surveyor
-                            </button>
-
-
-                            <button
-                                type="button"
-                                data-search-query="construction company in Abuja"
-                            >
-                                Construction company in Abuja
-                            </button>
-
-                        </div>
-
-
-                        <!-- =================================================
-                             SEARCH STATUS
-                             ================================================= -->
-
-                        <div
-                            id="search-status"
-                            class="nexus-search-status"
-                            role="status"
-                            aria-live="polite"
-                            aria-atomic="true"
-                        ></div>
-
-                    </div>
-
-
-                    <!-- =================================================
-                         HERO NETWORK VISUAL
-                         ================================================= -->
-
-                    <div
-                        class="nexus-hero__visual"
-                        aria-label="Nexus professional network"
+                    <button
+                        id="quick-action-button"
+                        class="icon-button"
+                        aria-label="Create"
                     >
+                        ＋
+                    </button>
 
+                    <button
+                        id="notification-button"
+                        class="icon-button notification-trigger"
+                        aria-label="Notifications"
+                    >
+                        ◈
+                        <span id="notification-dot" class="notification-dot hidden"></span>
+                    </button>
 
-                        <div
-                            class="nexus-network-orb"
-                            aria-hidden="true"
-                        >
-
-
-                            <div
-                                class="nexus-network-orb__core"
-                            >
-
-                                <span>
-                                    N
-                                </span>
-
-                                <small>
-                                    CONNECT
-                                </small>
-
-                            </div>
-
-
-                            <div
-                                class="nexus-network-orb__node nexus-network-orb__node--one"
-                            >
-                                STAFF
-                            </div>
-
-
-                            <div
-                                class="nexus-network-orb__node nexus-network-orb__node--two"
-                            >
-                                CERTIFIED
-                            </div>
-
-
-                            <div
-                                class="nexus-network-orb__node nexus-network-orb__node--three"
-                            >
-                                BUSINESS
-                            </div>
-
-
-                            <div
-                                class="nexus-network-orb__node nexus-network-orb__node--four"
-                            >
-                                USERS
-                            </div>
-
-                        </div>
-
-
-                        <div
-                            class="nexus-hero__trust"
-                        >
-
-                            <div>
-
-                                <strong>
-                                    Trusted Network
-                                </strong>
-
-                                <span>
-                                    Identity • Skills • Location • Verification
-                                </span>
-
-                            </div>
-
-                        </div>
-
-                    </div>
+                    <button
+                        id="profile-button"
+                        class="avatar-button"
+                        aria-label="Profile"
+                    >
+                        <span id="top-avatar" class="avatar">N</span>
+                    </button>
 
                 </div>
 
-            </section>
+            </header>
 
 
-            <!-- =====================================================
-                 PLATFORM CAPABILITIES
-                 ===================================================== -->
+            <div id="page-content" class="page-content">
 
-            <section
-                id="platform"
-                class="nexus-section"
-                aria-labelledby="platform-title"
-            >
+                <!-- HOME -->
 
-                <div
-                    class="nexus-container"
-                >
+                <section id="view-home" class="app-view active">
 
-
-                    <div
-                        class="nexus-section-heading"
-                    >
+                    <div class="welcome-section">
 
                         <div>
-
-                            <span
-                                class="nexus-eyebrow"
-                            >
-                                NEXUS CONNECT PLATFORM
-                            </span>
-
-                            <h2 id="platform-title">
-                                One network. Multiple ways to solve problems.
-                            </h2>
-
+                            <span class="eyebrow">YOUR CONNECT</span>
+                            <h1>
+                                Good day,
+                                <span id="welcome-name">there</span>
+                                👋
+                            </h1>
+                            <p>What's happening in your Connect?</p>
                         </div>
 
-
-                        <p>
-                            Nexus Connect brings discovery,
-                            matching, requests, communication and
-                            trust into one professional ecosystem.
-                        </p>
-
-                    </div>
-
-
-                    <div
-                        class="nexus-capability-grid"
-                    >
-
-
-                        <!-- =================================================
-                             FINDER
-                             ================================================= -->
-
-                        <article
-                            class="nexus-capability-card"
-                        >
-
-                            <div
-                                class="nexus-capability-card__icon"
-                                aria-hidden="true"
-                            >
-                                ⌕
-                            </div>
-
-                            <span
-                                class="nexus-capability-card__label"
-                            >
-                                DISCOVER
-                            </span>
-
-                            <h3>
-                                Nexus Finder
-                            </h3>
-
-                            <p>
-                                Search people, skills, services,
-                                businesses and locations.
-                            </p>
-
-                            <button
-                                type="button"
-                                class="nexus-text-button"
-                                data-feature="finder"
-                            >
-                                Explore Finder →
-                            </button>
-
-                        </article>
-
-
-                        <!-- =================================================
-                             MATCH
-                             ================================================= -->
-
-                        <article
-                            class="nexus-capability-card"
-                        >
-
-                            <div
-                                class="nexus-capability-card__icon"
-                                aria-hidden="true"
-                            >
-                                ◎
-                            </div>
-
-                            <span
-                                class="nexus-capability-card__label"
-                            >
-                                INTELLIGENCE
-                            </span>
-
-                            <h3>
-                                Nexus Match
-                            </h3>
-
-                            <p>
-                                Match requirements with relevant
-                                skills, location and availability.
-                            </p>
-
-                            <button
-                                type="button"
-                                class="nexus-text-button"
-                                data-feature="match"
-                            >
-                                Explore Matching →
-                            </button>
-
-                        </article>
-
-
-                        <!-- =================================================
-                             REQUEST
-                             ================================================= -->
-
-                        <article
-                            class="nexus-capability-card"
-                        >
-
-                            <div
-                                class="nexus-capability-card__icon"
-                                aria-hidden="true"
-                            >
-                                □
-                            </div>
-
-                            <span
-                                class="nexus-capability-card__label"
-                            >
-                                SOLUTIONS
-                            </span>
-
-                            <h3>
-                                Nexus Request
-                            </h3>
-
-                            <p>
-                                Describe what you need and receive
-                                relevant professional matches.
-                            </p>
-
-                            <button
-                                type="button"
-                                class="nexus-text-button"
-                                data-feature="request"
-                            >
-                                Create Request →
-                            </button>
-
-                        </article>
-
-
-                        <!-- =================================================
-                             CONNECT
-                             ================================================= -->
-
-                        <article
-                            class="nexus-capability-card"
-                        >
-
-                            <div
-                                class="nexus-capability-card__icon"
-                                aria-hidden="true"
-                            >
-                                ◇
-                            </div>
-
-                            <span
-                                class="nexus-capability-card__label"
-                            >
-                                COMMUNICATION
-                            </span>
-
-                            <h3>
-                                Nexus Connect
-                            </h3>
-
-                            <p>
-                                Communicate with matched people and
-                                businesses through secure messaging.
-                            </p>
-
-                            <button
-                                type="button"
-                                class="nexus-text-button"
-                                data-feature="connect"
-                            >
-                                Open Connect →
-                            </button>
-
-                        </article>
-
-                    </div>
-
-                </div>
-
-            </section>
-
-
-            <!-- =====================================================
-                 TRUSTED IDENTITY SYSTEM
-                 ===================================================== -->
-
-            <section
-                id="network"
-                class="nexus-section nexus-section--trust"
-                aria-labelledby="network-title"
-            >
-
-                <div
-                    class="nexus-container"
-                >
-
-
-                    <div
-                        class="nexus-section-heading"
-                    >
-
-                        <div>
-
-                            <span
-                                class="nexus-eyebrow"
-                            >
-                                TRUST & VERIFICATION
-                            </span>
-
-                            <h2 id="network-title">
-                                Know who you are connecting with.
-                            </h2>
-
-                        </div>
-
-                        <p>
-                            Nexus identity levels make professional
-                            status visible and understandable.
-                        </p>
-
-                    </div>
-
-
-                    <div
-                        class="nexus-identity-grid"
-                    >
-
-
-                        <!-- =================================================
-                             NEXUS STAFF
-                             ================================================= -->
-
-                        <article
-                            class="nexus-identity-card"
-                        >
-
-                            <div
-                                class="nexus-identity-card__top"
-                            >
-
-                                <div
-                                    class="nexus-identity-card__avatar"
-                                    aria-hidden="true"
-                                >
-                                    NS
-                                </div>
-
-                                <span
-                                    class="nexus-badge nexus-badge--staff"
-                                >
-                                    NEXUS STAFF
-                                </span>
-
-                            </div>
-
-                            <h3>
-                                Nexus Staff
-                            </h3>
-
-                            <p>
-                                Employees and authorized personnel
-                                of Nexus Buildsolutions Limited.
-                            </p>
-
-                        </article>
-
-
-                        <!-- =================================================
-                             NEXUS CERTIFIED PROFESSIONAL
-                             ================================================= -->
-
-                        <article
-                            class="nexus-identity-card"
-                        >
-
-                            <div
-                                class="nexus-identity-card__top"
-                            >
-
-                                <div
-                                    class="nexus-identity-card__avatar"
-                                    aria-hidden="true"
-                                >
-                                    CP
-                                </div>
-
-                                <span
-                                    class="nexus-badge nexus-badge--certified"
-                                >
-                                    NEXUS CERTIFIED
-                                </span>
-
-                            </div>
-
-                            <h3>
-                                Certified Professional
-                            </h3>
-
-                            <p>
-                                Verified professionals with active
-                                Nexus certification credentials.
-                            </p>
-
-                        </article>
-
-
-                        <!-- =================================================
-                             NEXUS CERTIFIED BUSINESS
-                             ================================================= -->
-
-                        <article
-                            class="nexus-identity-card"
-                        >
-
-                            <div
-                                class="nexus-identity-card__top"
-                            >
-
-                                <div
-                                    class="nexus-identity-card__avatar"
-                                    aria-hidden="true"
-                                >
-                                    CB
-                                </div>
-
-                                <span
-                                    class="nexus-badge nexus-badge--business"
-                                >
-                                    CERTIFIED BUSINESS
-                                </span>
-
-                            </div>
-
-                            <h3>
-                                Nexus Certified Business
-                            </h3>
-
-                            <p>
-                                Verified businesses participating
-                                in the Nexus professional network.
-                            </p>
-
-                        </article>
-
-
-                        <!-- =================================================
-                             VERIFIED USER
-                             ================================================= -->
-
-                        <article
-                            class="nexus-identity-card"
-                        >
-
-                            <div
-                                class="nexus-identity-card__top"
-                            >
-
-                                <div
-                                    class="nexus-identity-card__avatar"
-                                    aria-hidden="true"
-                                >
-                                    VU
-                                </div>
-
-                                <span
-                                    class="nexus-badge nexus-badge--verified"
-                                >
-                                    VERIFIED USER
-                                </span>
-
-                            </div>
-
-                            <h3>
-                                Verified User
-                            </h3>
-
-                            <p>
-                                Registered users whose account
-                                identity has been verified.
-                            </p>
-
-                        </article>
-
-                    </div>
-
-                </div>
-
-            </section>
-
-
-            <!-- =====================================================
-                 NEXUS REQUEST
-                 ===================================================== -->
-
-            <section
-                id="requests"
-                class="nexus-section"
-                aria-labelledby="requests-title"
-            >
-
-                <div
-                    class="nexus-container"
-                >
-
-
-                    <div
-                        class="nexus-request-panel"
-                    >
-
-
-                        <div
-                            class="nexus-request-panel__content"
-                        >
-
-                            <span
-                                class="nexus-eyebrow"
-                            >
-                                NEXUS REQUEST
-                            </span>
-
-                            <h2 id="requests-title">
-                                Tell Nexus what you need.
-                            </h2>
-
-                            <p>
-                                You do not need to know the person's
-                                name. Describe the duty, service,
-                                expertise or solution you need.
-                            </p>
-
-
-                            <div
-                                class="nexus-request-example"
-                            >
-
-                                <span>
-                                    Example
-                                </span>
-
-                                <strong>
-                                    "I need a certified electrical
-                                    technician in Abuja."
-                                </strong>
-
-                            </div>
-
-
-                            <button
-                                type="button"
-                                id="create-request-button"
-                                class="nexus-button nexus-button--gold"
-                                data-request-service="professional service"
-                            >
-                                Create a Request
-                            </button>
-
-                        </div>
-
-
-                        <!-- =================================================
-                             REQUEST FLOW
-                             ================================================= -->
-
-                        <div
-                            class="nexus-request-flow"
-                            aria-label="Nexus request process"
-                        >
-
-
-                            <div
-                                class="nexus-flow-step"
-                            >
-
-                                <span>
-                                    01
-                                </span>
-
-                                <strong>
-                                    Describe
-                                </strong>
-
-                            </div>
-
-
-                            <div
-                                class="nexus-flow-line"
-                                aria-hidden="true"
-                            ></div>
-
-
-                            <div
-                                class="nexus-flow-step"
-                            >
-
-                                <span>
-                                    02
-                                </span>
-
-                                <strong>
-                                    Match
-                                </strong>
-
-                            </div>
-
-
-                            <div
-                                class="nexus-flow-line"
-                                aria-hidden="true"
-                            ></div>
-
-
-                            <div
-                                class="nexus-flow-step"
-                            >
-
-                                <span>
-                                    03
-                                </span>
-
-                                <strong>
-                                    Connect
-                                </strong>
-
-                            </div>
-
-
-                            <div
-                                class="nexus-flow-line"
-                                aria-hidden="true"
-                            ></div>
-
-
-                            <div
-                                class="nexus-flow-step"
-                            >
-
-                                <span>
-                                    04
-                                </span>
-
-                                <strong>
-                                    Solve
-                                </strong>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </section>
-
-
-            <!-- =====================================================
-                 PROFESSIONAL TRUST PROMISE
-                 ===================================================== -->
-
-            <section
-                class="nexus-section nexus-section--trust-promise"
-                aria-labelledby="trust-promise-title"
-            >
-
-                <div
-                    class="nexus-container"
-                >
-
-
-                    <div
-                        class="nexus-trust-promise"
-                    >
-
-
-                        <div
-                            class="nexus-trust-promise__icon"
-                            aria-hidden="true"
-                        >
-                            ✓
-                        </div>
-
-
-                        <div
-                            class="nexus-trust-promise__content"
-                        >
-
-                            <span
-                                class="nexus-eyebrow"
-                            >
-                                NEXUS TRUST
-                            </span>
-
-                            <h2 id="trust-promise-title">
-                                Verification should mean something.
-                            </h2>
-
-                            <p>
-                                Nexus certification will be backed by
-                                controlled verification records,
-                                professional categories, skills,
-                                status and certification history.
-                            </p>
-
-                        </div>
-
-
-                        <button
-                            type="button"
-                            class="nexus-button nexus-button--secondary"
-                            data-feature="verification"
-                        >
-                            Learn About Verification
+                        <button class="primary-button" data-view="discover">
+                            Find People
                         </button>
 
                     </div>
 
-                </div>
 
-            </section>
+                    <div class="dashboard-grid">
 
+                        <article class="dashboard-card activity-summary">
+                            <div class="card-header">
+                                <div>
+                                    <span class="eyebrow">OVERVIEW</span>
+                                    <h2>Your Activity</h2>
+                                </div>
+                            </div>
 
-            <!-- =====================================================
-                 2030 PLATFORM VISION
-                 ===================================================== -->
+                            <div class="activity-metrics">
 
-            <section
-                class="nexus-section nexus-section--future"
-                aria-labelledby="future-title"
-            >
+                                <div class="metric">
+                                    <strong id="metric-messages">0</strong>
+                                    <span>Messages</span>
+                                </div>
 
-                <div
-                    class="nexus-container"
-                >
+                                <div class="metric">
+                                    <strong id="metric-connections">0</strong>
+                                    <span>Connections</span>
+                                </div>
 
+                                <div class="metric">
+                                    <strong id="metric-groups">0</strong>
+                                    <span>Groups</span>
+                                </div>
 
-                    <div
-                        class="nexus-future-panel"
-                    >
-
-
-                        <div>
-
-                            <span
-                                class="nexus-eyebrow"
-                            >
-                                BUILT FOR 2030
-                            </span>
-
-                            <h2 id="future-title">
-                                A platform designed to grow with Nexus.
-                            </h2>
-
-                            <p>
-                                The architecture is prepared for
-                                intelligent search, recommendation
-                                systems, real-time communication,
-                                business networking, analytics and
-                                future platform services.
-                            </p>
-
-                        </div>
+                            </div>
+                        </article>
 
 
-                        <div
-                            class="nexus-future-grid"
-                        >
+                        <article class="dashboard-card quick-card">
 
-                            <span>
-                                AI Search
-                            </span>
+                            <div class="card-header">
+                                <div>
+                                    <span class="eyebrow">QUICK ACTIONS</span>
+                                    <h2>Get started</h2>
+                                </div>
+                            </div>
 
-                            <span>
-                                Smart Matching
-                            </span>
+                            <div class="quick-actions">
 
-                            <span>
-                                Real-time Messaging
-                            </span>
+                                <button data-action="new-message">
+                                    <span>＋</span>
+                                    New message
+                                </button>
 
-                            <span>
-                                Professional Directory
-                            </span>
+                                <button data-view="people">
+                                    <span>♧</span>
+                                    Find people
+                                </button>
 
-                            <span>
-                                Business Network
-                            </span>
+                                <button data-view="ai">
+                                    <span>✦</span>
+                                    Ask Nexus AI
+                                </button>
 
-                            <span>
-                                Trust & Safety
-                            </span>
+                            </div>
 
-                        </div>
+                        </article>
 
                     </div>
 
-                </div>
 
-            </section>
+                    <section class="content-section">
 
+                        <div class="section-heading">
+                            <div>
+                                <span class="eyebrow">COMMUNICATION</span>
+                                <h2>Recent Conversations</h2>
+                            </div>
+
+                            <button class="text-button" data-view="messages">
+                                View all
+                            </button>
+                        </div>
+
+                        <div id="recent-conversations" class="conversation-list">
+
+                            <div class="empty-state compact">
+                                <div class="empty-icon">◌</div>
+                                <strong>Your conversations start here.</strong>
+                                <p>Connect with someone and start your first conversation.</p>
+                            </div>
+
+                        </div>
+
+                    </section>
+
+
+                    <section class="content-section">
+
+                        <div class="section-heading">
+                            <div>
+                                <span class="eyebrow">NETWORK</span>
+                                <h2>Suggested Connections</h2>
+                            </div>
+
+                            <button class="text-button" data-view="people">
+                                See people
+                            </button>
+                        </div>
+
+                        <div id="suggested-people" class="people-grid"></div>
+
+                    </section>
+
+                </section>
+
+
+                <!-- OTHER VIEWS -->
+
+                <section id="view-messages" class="app-view"></section>
+                <section id="view-people" class="app-view"></section>
+                <section id="view-discover" class="app-view"></section>
+                <section id="view-groups" class="app-view"></section>
+                <section id="view-activity" class="app-view"></section>
+                <section id="view-media" class="app-view"></section>
+                <section id="view-ai" class="app-view"></section>
+                <section id="view-saved" class="app-view"></section>
+                <section id="view-pinned" class="app-view"></section>
+                <section id="view-settings" class="app-view"></section>
+                <section id="view-help" class="app-view"></section>
+
+            </div>
 
         </main>
 
 
-        <!-- =========================================================
-             GLOBAL FOOTER
-             ========================================================= -->
+        <!-- Mobile bottom navigation -->
 
-        <footer
-            class="nexus-footer"
-        >
+        <nav class="mobile-navigation">
 
-            <div
-                class="nexus-container nexus-footer__inner"
+            <button data-view="home" class="mobile-nav-item active">
+                <span>⌂</span>
+                Home
+            </button>
+
+            <button data-view="messages" class="mobile-nav-item">
+                <span>◌</span>
+                Chats
+            </button>
+
+            <button id="mobile-create" class="mobile-create">
+                ＋
+            </button>
+
+            <button data-view="discover" class="mobile-nav-item">
+                <span>◎</span>
+                Discover
+            </button>
+
+            <button id="mobile-profile" class="mobile-nav-item">
+                <span>●</span>
+                Me
+            </button>
+
+        </nav>
+
+    </section>
+
+
+    <!-- =========================================================
+         GLOBAL DRAWERS
+    ========================================================== -->
+
+    <div id="drawer-overlay" class="drawer-overlay hidden"></div>
+
+    <aside id="search-drawer" class="drawer drawer-right">
+
+        <div class="drawer-header">
+            <div>
+                <span class="eyebrow">NEXUS SEARCH</span>
+                <h2>Search</h2>
+            </div>
+
+            <button class="icon-button" data-close-drawer>×</button>
+        </div>
+
+        <div class="search-box">
+            <span>⌕</span>
+            <input
+                id="global-search"
+                type="search"
+                placeholder="People, messages, groups..."
+                autocomplete="off"
             >
+        </div>
+
+        <div id="search-results" class="drawer-content">
+
+            <div class="empty-state">
+                <div class="empty-icon">⌕</div>
+                <strong>Search Nexus Connect</strong>
+                <p>Find people, usernames, conversations and more.</p>
+            </div>
+
+        </div>
+
+    </aside>
 
 
-                <!-- =================================================
-                     FOOTER BRAND
-                     ================================================= -->
+    <aside id="notification-drawer" class="drawer drawer-right">
 
-                <div
-                    class="nexus-footer__brand"
-                >
+        <div class="drawer-header">
+            <div>
+                <span class="eyebrow">UPDATES</span>
+                <h2>Notifications</h2>
+            </div>
 
-                    <div
-                        class="nexus-footer__logo-wrap"
-                    >
+            <button class="icon-button" data-close-drawer>×</button>
+        </div>
 
-                        <img
-                            src="/assets/logo/Screenshot%202025-09-29%20122409.png"
-                            alt="Nexus Buildsolutions Limited"
-                            class="nexus-footer__logo"
-                            width="150"
-                            height="76"
-                            loading="lazy"
-                            decoding="async"
-                        >
+        <div id="notification-list" class="drawer-content">
 
-                    </div>
+            <div class="empty-state">
+                <div class="empty-icon">◈</div>
+                <strong>You're all caught up.</strong>
+                <p>New activity will appear here.</p>
+            </div>
 
+        </div>
 
-                    <strong>
-                        NEXUS CONNECT
-                    </strong>
-
-                    <span>
-                        Nexus Buildsolutions Limited
-                    </span>
-
-                    <p>
-                        Connecting People. Finding Expertise.
-                        Delivering Solutions.
-                    </p>
-
-                </div>
+    </aside>
 
 
-                <!-- =================================================
-                     FOOTER NAVIGATION
-                     ================================================= -->
+    <aside id="profile-drawer" class="drawer drawer-right">
 
-                <nav
-                    class="nexus-footer__links"
-                    aria-label="Footer navigation"
-                >
+        <div class="drawer-header">
+            <div>
+                <span class="eyebrow">ACCOUNT</span>
+                <h2>Your Profile</h2>
+            </div>
 
-                    <a href="#home">
-                        Home
-                    </a>
+            <button class="icon-button" data-close-drawer>×</button>
+        </div>
 
-                    <a href="#finder">
-                        Finder
-                    </a>
+        <div class="profile-drawer-content">
 
-                    <a href="#requests">
-                        Requests
-                    </a>
+            <div class="profile-hero">
 
-                    <a href="#network">
-                        Network
-                    </a>
+                <div id="drawer-avatar" class="avatar avatar-xl">N</div>
 
-                </nav>
+                <h2 id="drawer-profile-name">Nexus User</h2>
 
+                <p id="drawer-profile-username">@username</p>
 
-                <!-- =================================================
-                     FOOTER LEGAL
-                     ================================================= -->
-
-                <div
-                    class="nexus-footer__legal"
-                >
-
-                    <span>
-                        Nexus Connect 2030
-                    </span>
-
-                    <span>
-                        © Nexus Buildsolutions Limited
-                    </span>
-
-                </div>
+                <span class="status-pill">
+                    <i class="online-dot"></i>
+                    Online
+                </span>
 
             </div>
 
-        </footer>
+            <div class="profile-actions">
 
+                <button class="secondary-button" data-view="settings">
+                    Settings
+                </button>
+
+                <button id="logout-button" class="danger-button">
+                    Sign out
+                </button>
+
+            </div>
+
+        </div>
+
+    </aside>
+
+
+    <!-- QUICK ACTION DRAWER -->
+
+    <div id="quick-action-menu" class="quick-action-menu hidden">
+
+        <div class="quick-menu-header">
+            <strong>Quick Actions</strong>
+            <button class="icon-button" data-close-quick>×</button>
+        </div>
+
+        <button data-action="new-message">
+            <span>＋</span>
+            New Message
+        </button>
+
+        <button data-action="create-group">
+            <span>♧</span>
+            Create Group
+        </button>
+
+        <button data-view="ai">
+            <span>✦</span>
+            Open Nexus AI
+        </button>
+
+        <button data-view="settings">
+            <span>⚙</span>
+            Settings
+        </button>
 
     </div>
 
 
-    <!-- =========================================================
-         APPLICATION JAVASCRIPT
-         ========================================================= -->
+    <!-- GLOBAL TOAST -->
 
-    <script
-        src="./js/app.js"
-        defer
-    ></script>
+    <div
+        id="toast-container"
+        class="toast-container"
+        aria-live="polite"
+        aria-atomic="true"
+    ></div>
 
+
+    <!-- LOADING -->
+
+    <div id="global-loader" class="global-loader hidden">
+
+        <div class="loader-card">
+
+            <div class="loader-spinner"></div>
+
+            <strong id="loader-text">
+                Connecting to Nexus...
+            </strong>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/app.js" defer></script>
 
 </body>
 </html>
