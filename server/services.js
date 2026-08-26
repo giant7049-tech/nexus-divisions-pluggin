@@ -1,1899 +1,2736 @@
-'use strict';
-
 /**
- * ================================================================
- * NEXUS CONNECT 2030
- * NEXUS BUILDSOLUTIONS LIMITED
+ * ============================================================
+ * NEXUS OS
+ * server/services.js
+ * ============================================================
  *
- * ADVANCED SERVICE ENGINE
- * ---------------------------------------------------------------
- * File: services.js
+ * Application / Business Service Layer
  *
- * Architecture:
+ * RESPONSIBILITIES
+ * ------------------------------------------------------------
+ * - Authentication business logic
+ * - User/profile operations
+ * - Advertisement operations
+ * - Analytics event processing
+ * - Payment orchestration
+ * - Messaging
+ * - Notifications
+ * - File/media service abstraction
+ * - Administration operations
+ * - Audit recording
  *
- *   Routes
- *      ↓
- *   Service Layer
- *      ↓
- *   Models
- *      ↓
- *   MongoDB
+ * ARCHITECTURAL RULES
+ * ------------------------------------------------------------
+ * 1. Services contain business logic.
+ * 2. Services do not contain HTTP-specific logic.
+ * 3. Services do not directly parse request objects.
+ * 4. Services do not expose passwords/secrets.
+ * 5. Services use repositories/models supplied by the application.
+ * 6. Services return application-level results.
+ * 7. Financial operations are idempotent.
+ * 8. Administrative changes are auditable.
+ * 9. Analytics distinguishes organic events from corrections.
+ * 10. External providers are accessed through adapters.
  *
- * Responsibilities:
- *   • Database lifecycle
- *   • Authentication
- *   • Secure PIN handling
- *   • JWT sessions
- *   • User profiles
- *   • Professional discovery
- *   • Service discovery
- *   • Conversations
- *   • Messaging
- *   • Connections
- *   • Notifications
- *   • Groups
- *   • Dashboard intelligence
- *   • Platform statistics
- *
- * Designed for:
- *   Nexus Connect 2030
- *   Professional network
- *   Service marketplace
- *   Verified business ecosystem
- *   Real-time communication
- *
- * IMPORTANT:
- * This file contains backend/business logic.
- * Visual UI belongs to the frontend files.
- * ================================================================
+ * This file intentionally avoids fake/demo data.
+ * ============================================================
  */
 
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const mongoose = require('mongoose');
-
-const {
-  User,
-  Conversation,
-  Message,
-  Group,
-  Connection,
-  Notification,
-} = require('./models');
-
-const config = require('./config');
+import crypto from 'node:crypto';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { nanoid } from 'nanoid';
 
 
-/* ================================================================
-   01. APPLICATION ERROR
-================================================================ */
+// ============================================================
+// CONSTANTS
+// ============================================================
 
-class AppError extends Error {
-  constructor(
-    message,
+const DEFAULT_PASSWORD_ROUNDS = 12;
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+const MAX_MESSAGE_LENGTH = 10_000;
+const MAX_ANALYTICS_BATCH = 100;
+
+const USER_ROLES = new Set([
+  'user',
+  'professional',
+  'business',
+  'admin',
+  'super_admin',
+]);
+
+const ADVERTISEMENT_STATUSES = new Set([
+  'draft',
+  'pending',
+  'active',
+  'paused',
+  'expired',
+  'rejected',
+  'archived',
+]);
+
+const PAYMENT_STATUSES = new Set([
+  'pending',
+  'processing',
+  'paid',
+  'failed',
+  'cancelled',
+  'refunded',
+  'partially_refunded',
+]);
+
+const MESSAGE_STATUSES = new Set([
+  'sent',
+  'delivered',
+  'read',
+  'failed',
+]);
+
+const ANALYTICS_EVENT_TYPES = new Set([
+  'impression',
+  'view',
+  'click',
+  'engagement',
+  'conversion',
+  'message',
+  'search',
+  'application',
+  'transaction',
+]);
+
+
+// ============================================================
+// ERROR TYPES
+// ============================================================
+
+export class ServiceError extends Error {
+  constructor(message, {
+    code = 'SERVICE_ERROR',
     statusCode = 500,
-    code = 'INTERNAL_ERROR',
-    details = null
-  ) {
-    super(message);
+    details = undefined,
+    cause = undefined,
+  } = {}) {
+    super(message, { cause });
 
-    this.name = 'AppError';
-    this.statusCode = statusCode;
+    this.name = 'ServiceError';
     this.code = code;
+    this.statusCode = statusCode;
     this.details = details;
-
-    Error.captureStackTrace(
-      this,
-      this.constructor
-    );
   }
 }
 
 
-/* ================================================================
-   02. CONFIGURATION HELPERS
-================================================================ */
+export class ValidationError extends ServiceError {
+  constructor(message, details) {
+    super(message, {
+      code: 'VALIDATION_ERROR',
+      statusCode: 400,
+      details,
+    });
 
-function getDatabaseUrl() {
-  return (
-    process.env.DATABASE_URL ||
-    process.env.MONGODB_URI ||
-    config.databaseUrl ||
-    config.database?.url ||
-    config.database?.uri ||
-    config.mongodb?.url ||
-    config.mongodb?.uri ||
-    null
-  );
-}
-
-
-function getJWTSecret() {
-  return (
-    process.env.JWT_SECRET ||
-    config.jwtSecret ||
-    config.jwt?.secret ||
-    null
-  );
-}
-
-
-function getJWTExpiry() {
-  return (
-    process.env.JWT_EXPIRES_IN ||
-    config.jwtExpiresIn ||
-    config.jwt?.expiresIn ||
-    '7d'
-  );
-}
-
-
-function getSaltRounds() {
-  return (
-    Number(
-      process.env.BCRYPT_SALT_ROUNDS ||
-      config.bcryptSaltRounds ||
-      config.security?.bcryptSaltRounds
-    ) || 12
-  );
-}
-
-
-/* ================================================================
-   03. DATABASE ENGINE
-================================================================ */
-
-async function connectDatabase() {
-  const databaseUrl =
-    getDatabaseUrl();
-
-  if (!databaseUrl) {
-    throw new AppError(
-      'MongoDB connection is not configured.',
-      500,
-      'DATABASE_CONFIGURATION_ERROR'
-    );
+    this.name = 'ValidationError';
   }
+}
 
-  if (
-    mongoose.connection.readyState === 1
-  ) {
-    return mongoose.connection;
+
+export class AuthenticationError extends ServiceError {
+  constructor(message = 'Authentication failed') {
+    super(message, {
+      code: 'AUTHENTICATION_ERROR',
+      statusCode: 401,
+    });
+
+    this.name = 'AuthenticationError';
   }
-
-  mongoose.set(
-    'strictQuery',
-    true
-  );
-
-  mongoose.set(
-    'sanitizeFilter',
-    true
-  );
-
-  await mongoose.connect(
-    databaseUrl,
-    {
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-
-      maxPoolSize:
-        Number(
-          process.env.MONGO_MAX_POOL_SIZE
-        ) || 20,
-
-      minPoolSize:
-        Number(
-          process.env.MONGO_MIN_POOL_SIZE
-        ) || 2,
-
-      retryWrites: true,
-    }
-  );
-
-  console.log(
-    `[NEXUS DATABASE] Connected to ${mongoose.connection.name}`
-  );
-
-  return mongoose.connection;
 }
 
 
-async function disconnectDatabase() {
-  if (
-    mongoose.connection.readyState === 0
-  ) {
-    return;
+export class AuthorizationError extends ServiceError {
+  constructor(message = 'You are not authorized to perform this action') {
+    super(message, {
+      code: 'AUTHORIZATION_ERROR',
+      statusCode: 403,
+    });
+
+    this.name = 'AuthorizationError';
   }
-
-  await mongoose.disconnect();
-
-  console.log(
-    '[NEXUS DATABASE] Connection closed.'
-  );
 }
 
 
-async function isDatabaseReady() {
-  return (
-    mongoose.connection.readyState === 1
-  );
+export class NotFoundError extends ServiceError {
+  constructor(resource = 'Resource') {
+    super(`${resource} not found`, {
+      code: 'NOT_FOUND',
+      statusCode: 404,
+    });
+
+    this.name = 'NotFoundError';
+  }
 }
 
 
-/* ================================================================
-   04. NORMALIZATION
-================================================================ */
+export class ConflictError extends ServiceError {
+  constructor(message = 'The requested operation conflicts with existing data') {
+    super(message, {
+      code: 'CONFLICT',
+      statusCode: 409,
+    });
+
+    this.name = 'ConflictError';
+  }
+}
+
+
+// ============================================================
+// GENERAL HELPERS
+// ============================================================
+
+function assert(condition, message, details) {
+  if (!condition) {
+    throw new ValidationError(message, details);
+  }
+}
+
 
 function normalizeEmail(email) {
-  return String(email || '')
+  return String(email ?? '')
     .trim()
     .toLowerCase();
 }
 
 
-function normalizeUsername(username) {
-  return String(username || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^@/, '');
-}
-
-
-function normalizeText(value) {
-  return String(value || '')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-
-/* ================================================================
-   05. VALIDATION
-================================================================ */
-
-function validateEmail(email) {
-  const value =
-    normalizeEmail(email);
-
-  const pattern =
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  if (!pattern.test(value)) {
-    throw new AppError(
-      'Please provide a valid email address.',
-      400,
-      'INVALID_EMAIL'
-    );
+function normalizeString(value) {
+  if (value === null || value === undefined) {
+    return '';
   }
 
-  return value;
+  return String(value).trim();
 }
 
 
-function validateUsername(username) {
-  const value =
-    normalizeUsername(username);
-
-  const pattern =
-    /^[a-z0-9_]{3,30}$/;
-
-  if (!pattern.test(value)) {
-    throw new AppError(
-      'Username must contain 3–30 letters, numbers, or underscores.',
-      400,
-      'INVALID_USERNAME'
-    );
-  }
-
-  return value;
-}
-
-
-function validatePin(pin) {
-  const value =
-    String(pin || '').trim();
-
-  if (!/^\d{4}$/.test(value)) {
-    throw new AppError(
-      'PIN must contain exactly 4 digits.',
-      400,
-      'INVALID_PIN'
-    );
-  }
-
-  return value;
-}
-
-
-function validateDisplayName(name) {
-  const value =
-    normalizeText(name);
-
-  if (
-    value.length < 2 ||
-    value.length > 60
-  ) {
-    throw new AppError(
-      'Display name must contain between 2 and 60 characters.',
-      400,
-      'INVALID_DISPLAY_NAME'
-    );
-  }
-
-  return value;
-}
-
-
-/* ================================================================
-   06. SECURITY
-================================================================ */
-
-function generateToken(userId) {
-  const secret =
-    getJWTSecret();
-
-  if (!secret) {
-    throw new AppError(
-      'JWT authentication is not configured.',
-      500,
-      'AUTH_CONFIGURATION_ERROR'
-    );
-  }
-
-  return jwt.sign(
-    {
-      sub: String(userId),
-      type: 'access',
-      platform: 'nexus-connect',
-    },
-    secret,
-    {
-      expiresIn:
-        getJWTExpiry(),
-    }
+function normalizePagination(page, limit) {
+  const normalizedPage = Math.max(
+    Number.parseInt(page, 10) || DEFAULT_PAGE,
+    1,
   );
-}
 
-
-async function comparePin(
-  pin,
-  pinHash
-) {
-  if (!pinHash) {
-    return false;
-  }
-
-  return bcrypt.compare(
-    validatePin(pin),
-    pinHash
+  const normalizedLimit = Math.min(
+    Math.max(
+      Number.parseInt(limit, 10) || DEFAULT_LIMIT,
+      1,
+    ),
+    MAX_LIMIT,
   );
+
+  return {
+    page: normalizedPage,
+    limit: normalizedLimit,
+    skip: (normalizedPage - 1) * normalizedLimit,
+  };
 }
 
 
-async function hashPin(pin) {
-  return bcrypt.hash(
-    validatePin(pin),
-    getSaltRounds()
-  );
+function createRequestId(prefix = 'req') {
+  return `${prefix}_${nanoid(16)}`;
 }
 
 
-/* ================================================================
-   07. USER SANITIZATION
-================================================================ */
+function createPublicId(prefix) {
+  return `${prefix}_${nanoid(20)}`;
+}
+
+
+function createIdempotencyKey() {
+  return crypto.randomUUID();
+}
+
 
 function sanitizeUser(user) {
   if (!user) {
     return null;
   }
 
-  const source =
-    typeof user.toObject === 'function'
-      ? user.toObject()
-      : {
-          ...user,
-        };
+  const source = typeof user.toObject === 'function'
+    ? user.toObject()
+    : { ...user };
 
-  delete source.pinHash;
   delete source.password;
   delete source.passwordHash;
-  delete source.__v;
+  delete source.passwordResetToken;
+  delete source.passwordResetTokenHash;
+  delete source.emailVerificationToken;
+  delete source.emailVerificationTokenHash;
+  delete source.refreshToken;
+  delete source.refreshTokenHash;
 
   return source;
 }
 
 
-function getPublicUser(user) {
-  if (!user) {
+function sanitizeMessage(message) {
+  if (!message) {
     return null;
   }
 
-  return {
-    id: String(
-      user._id || user.id
-    ),
+  const source = typeof message.toObject === 'function'
+    ? message.toObject()
+    : { ...message };
 
-    username:
-      user.username || '',
-
-    displayName:
-      user.displayName || '',
-
-    avatar:
-      user.avatar || null,
-
-    bio:
-      user.bio || '',
-
-    status:
-      user.status || 'offline',
-
-    customStatus:
-      user.customStatus || '',
-
-    verified:
-      Boolean(
-        user.verified ||
-        user.isVerified
-      ),
-  };
+  return source;
 }
 
 
-/* ================================================================
-   08. AUTHENTICATION
-================================================================ */
-
-async function registerUser({
-  email,
-  username,
-  displayName,
-  pin,
-  confirmPin,
-}) {
-  const normalizedEmail =
-    validateEmail(email);
-
-  const normalizedUsername =
-    validateUsername(username);
-
-  const cleanName =
-    validateDisplayName(
-      displayName
-    );
-
-  const validPin =
-    validatePin(pin);
-
-  const validConfirmPin =
-    validatePin(confirmPin);
-
-  if (
-    validPin !==
-    validConfirmPin
-  ) {
-    throw new AppError(
-      'PIN confirmation does not match.',
-      400,
-      'PIN_MISMATCH'
-    );
-  }
-
-  const existingEmail =
-    await User.findOne({
-      email: normalizedEmail,
-    }).lean();
-
-  if (existingEmail) {
-    throw new AppError(
-      'An account with this email already exists.',
-      409,
-      'EMAIL_ALREADY_EXISTS'
-    );
-  }
-
-  const existingUsername =
-    await User.findOne({
-      username:
-        normalizedUsername,
-    }).lean();
-
-  if (existingUsername) {
-    throw new AppError(
-      'This username is already taken.',
-      409,
-      'USERNAME_ALREADY_EXISTS'
-    );
-  }
-
-  const pinHash =
-    await hashPin(validPin);
-
-  const user =
-    await User.create({
-      email:
-        normalizedEmail,
-
-      username:
-        normalizedUsername,
-
-      displayName:
-        cleanName,
-
-      pinHash,
-
-      status:
-        'online',
-
-      lastSeenAt:
-        new Date(),
-    });
-
-  const token =
-    generateToken(
-      user._id
-    );
-
-  return {
-    success: true,
-
-    message:
-      'Nexus Connect account created successfully.',
-
-    token,
-
-    user:
-      sanitizeUser(user),
-  };
-}
-
-
-async function loginUser({
-  identifier,
-  pin,
-}) {
-  const cleanIdentifier =
-    normalizeText(
-      identifier
-    );
-
-  if (!cleanIdentifier) {
-    throw new AppError(
-      'Username or email is required.',
-      400,
-      'IDENTIFIER_REQUIRED'
-    );
-  }
-
-  const normalized =
-    cleanIdentifier.toLowerCase();
-
-  const user =
-    await User.findOne({
-      $or: [
-        {
-          email: normalized,
-        },
-
-        {
-          username:
-            normalizeUsername(
-              normalized
-            ),
-        },
-      ],
-    });
-
-  if (!user) {
-    throw new AppError(
-      'Invalid username, email, or PIN.',
-      401,
-      'INVALID_CREDENTIALS'
-    );
-  }
-
-  const valid =
-    await comparePin(
-      pin,
-      user.pinHash
-    );
-
-  if (!valid) {
-    throw new AppError(
-      'Invalid username, email, or PIN.',
-      401,
-      'INVALID_CREDENTIALS'
-    );
-  }
-
-  user.status =
-    'online';
-
-  user.lastSeenAt =
-    new Date();
-
-  await user.save();
-
-  return {
-    success: true,
-
-    message:
-      'Login successful.',
-
-    token:
-      generateToken(
-        user._id
-      ),
-
-    user:
-      sanitizeUser(user),
-  };
-}
-
-
-async function getCurrentUser(
-  userId
-) {
-  const user =
-    await User.findById(
-      userId
-    );
-
-  if (!user) {
-    throw new AppError(
-      'User account not found.',
-      404,
-      'USER_NOT_FOUND'
-    );
-  }
-
-  return sanitizeUser(
-    user
+function ensureObject(value, fieldName) {
+  assert(
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value),
+    `${fieldName} must be an object`,
   );
 }
 
 
-/* ================================================================
-   09. PROFILE ENGINE
-================================================================ */
+function ensureString(value, fieldName, {
+  min = 1,
+  max = 255,
+} = {}) {
+  const normalized = normalizeString(value);
 
-async function getUserByUsername(
-  username
-) {
-  const normalized =
-    validateUsername(
-      username
-    );
-
-  const user =
-    await User.findOne({
-      username: normalized,
-    });
-
-  if (!user) {
-    throw new AppError(
-      'User not found.',
-      404,
-      'USER_NOT_FOUND'
-    );
-  }
-
-  return getPublicUser(
-    user
+  assert(
+    normalized.length >= min,
+    `${fieldName} is required`,
   );
+
+  assert(
+    normalized.length <= max,
+    `${fieldName} exceeds the maximum allowed length`,
+  );
+
+  return normalized;
 }
 
 
-async function updateProfile(
-  userId,
-  {
-    displayName,
-    bio,
-    avatar,
-    customStatus,
-  } = {}
-) {
-  const user =
-    await User.findById(
-      userId
-    );
+function ensureEmail(email) {
+  const normalized = normalizeEmail(email);
 
-  if (!user) {
-    throw new AppError(
-      'User account not found.',
-      404,
-      'USER_NOT_FOUND'
-    );
-  }
-
-  if (
-    displayName !==
-    undefined
-  ) {
-    user.displayName =
-      validateDisplayName(
-        displayName
-      );
-  }
-
-  if (
-    bio !== undefined
-  ) {
-    const cleanBio =
-      normalizeText(
-        bio
-      );
-
-    if (
-      cleanBio.length >
-      500
-    ) {
-      throw new AppError(
-        'Bio cannot exceed 500 characters.',
-        400,
-        'INVALID_BIO'
-      );
-    }
-
-    user.bio =
-      cleanBio;
-  }
-
-  if (
-    avatar !== undefined
-  ) {
-    user.avatar =
-      normalizeText(
-        avatar
-      ) || null;
-  }
-
-  if (
-    customStatus !==
-    undefined
-  ) {
-    const status =
-      normalizeText(
-        customStatus
-      );
-
-    if (
-      status.length >
-      100
-    ) {
-      throw new AppError(
-        'Custom status cannot exceed 100 characters.',
-        400,
-        'INVALID_CUSTOM_STATUS'
-      );
-    }
-
-    user.customStatus =
-      status;
-  }
-
-  await user.save();
-
-  return sanitizeUser(
-    user
+  assert(
+    normalized.length <= 320,
+    'Email address is too long',
   );
+
+  assert(
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized),
+    'A valid email address is required',
+  );
+
+  return normalized;
 }
 
 
-/* ================================================================
-   10. PROFESSIONAL DISCOVERY
-================================================================ */
+function ensureUserRole(role) {
+  const normalized = normalizeString(role).toLowerCase();
 
-async function searchUsers(
-  query,
-  limit = 20
-) {
-  const cleanQuery =
-    normalizeText(
-      query
-    );
-
-  if (!cleanQuery) {
-    return [];
-  }
-
-  const safeLimit =
-    Math.min(
-      Math.max(
-        Number(limit) || 20,
-        1
-      ),
-      50
-    );
-
-  const escaped =
-    cleanQuery.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      '\\$&'
-    );
-
-  const regex =
-    new RegExp(
-      escaped,
-      'i'
-    );
-
-  const users =
-    await User.find({
-      $or: [
-        {
-          username:
-            regex,
-        },
-
-        {
-          displayName:
-            regex,
-        },
-
-        {
-          bio:
-            regex,
-        },
-      ],
-    })
-      .select(
-        'username displayName avatar bio status customStatus verified isVerified'
-      )
-      .limit(
-        safeLimit
-      )
-      .lean();
-
-  return users.map(
-    getPublicUser
+  assert(
+    USER_ROLES.has(normalized),
+    'Invalid user role',
   );
+
+  return normalized;
 }
 
+
+function ensureAdvertisementStatus(status) {
+  const normalized = normalizeString(status).toLowerCase();
+
+  assert(
+    ADVERTISEMENT_STATUSES.has(normalized),
+    'Invalid advertisement status',
+  );
+
+  return normalized;
+}
+
+
+function ensurePaymentStatus(status) {
+  const normalized = normalizeString(status).toLowerCase();
+
+  assert(
+    PAYMENT_STATUSES.has(normalized),
+    'Invalid payment status',
+  );
+
+  return normalized;
+}
+
+
+function ensureMessageStatus(status) {
+  const normalized = normalizeString(status).toLowerCase();
+
+  assert(
+    MESSAGE_STATUSES.has(normalized),
+    'Invalid message status',
+  );
+
+  return normalized;
+}
+
+
+function ensureAnalyticsEventType(type) {
+  const normalized = normalizeString(type).toLowerCase();
+
+  assert(
+    ANALYTICS_EVENT_TYPES.has(normalized),
+    'Unsupported analytics event type',
+  );
+
+  return normalized;
+}
+
+
+function normalizeObjectId(value, fieldName = 'id') {
+  const normalized = normalizeString(value);
+
+  assert(
+    normalized.length > 0,
+    `${fieldName} is required`,
+  );
+
+  return normalized;
+}
+
+
+// ============================================================
+// SERVICE FACTORY
+// ============================================================
 
 /**
- * Advanced discovery response.
+ * Creates all NEXUS OS services.
  *
- * This gives the frontend a richer structure than simply
- * returning an array of users.
+ * The application supplies the persistence models/repositories,
+ * configuration and provider adapters.
+ *
+ * This keeps the business layer independent from Express,
+ * Fastify, Socket.IO and individual infrastructure providers.
  */
-async function discoverProfessionals(
-  query,
-  options = {}
-) {
+export function createServices({
+  models = {},
+  config = {},
+  providers = {},
+  logger = console,
+  clock = () => new Date(),
+} = {}) {
+
   const {
-    limit = 20,
-  } = options;
+    User,
+    Profile,
+    Advertisement,
+    AnalyticsEvent,
+    Payment,
+    Transaction,
+    Conversation,
+    Message,
+    Notification,
+    AuditLog,
+    Organization,
+  } = models;
 
-  const results =
-    await searchUsers(
-      query,
-      limit
-    );
 
-  return {
-    success: true,
+  // ==========================================================
+  // INTERNAL INFRASTRUCTURE
+  // ==========================================================
 
-    query:
-      normalizeText(
-        query
-      ),
+  function requireModel(model, modelName) {
+    if (!model) {
+      throw new ServiceError(
+        `${modelName} model is not configured`,
+        {
+          code: 'MODEL_NOT_CONFIGURED',
+          statusCode: 500,
+        },
+      );
+    }
 
-    count:
-      results.length,
+    return model;
+  }
 
-    results,
 
-    meta: {
-      engine:
-        'Nexus Discovery Engine',
+  async function executeWithSession(operation, session = null) {
+    if (session) {
+      return operation(session);
+    }
 
-      version:
-        '2030.1',
+    return operation(undefined);
+  }
 
-      source:
-        'Nexus Network',
+
+  async function writeAudit({
+    actorId = null,
+    action,
+    resourceType,
+    resourceId = null,
+    before = null,
+    after = null,
+    reason = null,
+    metadata = {},
+    requestId = null,
+  }) {
+    if (!AuditLog) {
+      logger.warn?.(
+        'AuditLog model is not configured; audit record was not persisted.',
+      );
+
+      return null;
+    }
+
+    return AuditLog.create({
+      actorId,
+      action,
+      resourceType,
+      resourceId,
+      before,
+      after,
+      reason,
+      metadata,
+      requestId,
+      createdAt: clock(),
+    });
+  }
+
+
+  // ==========================================================
+  // AUTHENTICATION SERVICE
+  // ==========================================================
+
+  const AuthenticationService = {
+
+    async hashPassword(password) {
+      assert(
+        typeof password === 'string',
+        'Password must be a string',
+      );
+
+      assert(
+        password.length >= 8,
+        'Password must contain at least 8 characters',
+      );
+
+      assert(
+        password.length <= 128,
+        'Password is too long',
+      );
+
+      const rounds = Number(
+        config.security?.bcryptRounds ??
+        DEFAULT_PASSWORD_ROUNDS,
+      );
+
+      return bcrypt.hash(password, rounds);
+    },
+
+
+    async verifyPassword(password, passwordHash) {
+      if (
+        typeof password !== 'string' ||
+        typeof passwordHash !== 'string'
+      ) {
+        return false;
+      }
+
+      return bcrypt.compare(password, passwordHash);
+    },
+
+
+    async register({
+      email,
+      password,
+      name,
+      role = 'user',
+      requestId = null,
+      metadata = {},
+    }) {
+      const UserModel = requireModel(User, 'User');
+
+      const normalizedEmail = ensureEmail(email);
+      const normalizedName = ensureString(name, 'Name', {
+        min: 2,
+        max: 120,
+      });
+
+      const normalizedRole = ensureUserRole(role);
+
+      const existing = await UserModel.findOne({
+        email: normalizedEmail,
+      });
+
+      if (existing) {
+        throw new ConflictError(
+          'An account with this email already exists',
+        );
+      }
+
+      const passwordHash = await this.hashPassword(password);
+
+      const user = await UserModel.create({
+        publicId: createPublicId('usr'),
+        email: normalizedEmail,
+        name: normalizedName,
+        passwordHash,
+        role: normalizedRole,
+        status: 'active',
+        emailVerified: false,
+        createdAt: clock(),
+        updatedAt: clock(),
+      });
+
+      await writeAudit({
+        actorId: user._id ?? user.id,
+        action: 'user.created',
+        resourceType: 'user',
+        resourceId: user._id ?? user.id,
+        after: sanitizeUser(user),
+        metadata,
+        requestId,
+      });
+
+      return sanitizeUser(user);
+    },
+
+
+    async authenticate({
+      email,
+      password,
+      requestId = null,
+    }) {
+      const UserModel = requireModel(User, 'User');
+
+      const normalizedEmail = ensureEmail(email);
+
+      const user = await UserModel.findOne({
+        email: normalizedEmail,
+      });
+
+      if (!user) {
+        throw new AuthenticationError(
+          'Invalid email or password',
+        );
+      }
+
+      if (
+        user.status &&
+        !['active', 'verified'].includes(user.status)
+      ) {
+        throw new AuthenticationError(
+          'This account is not currently available',
+        );
+      }
+
+      const validPassword = await this.verifyPassword(
+        password,
+        user.passwordHash,
+      );
+
+      if (!validPassword) {
+        throw new AuthenticationError(
+          'Invalid email or password',
+        );
+      }
+
+      if (typeof user.save === 'function') {
+        user.lastLoginAt = clock();
+        user.updatedAt = clock();
+        await user.save();
+      }
+
+      await writeAudit({
+        actorId: user._id ?? user.id,
+        action: 'user.authenticated',
+        resourceType: 'user',
+        resourceId: user._id ?? user.id,
+        metadata: {
+          authenticationMethod: 'password',
+        },
+        requestId,
+      });
+
+      return sanitizeUser(user);
+    },
+
+
+    issueAccessToken({
+      userId,
+      role,
+      expiresIn = config.auth?.accessTokenExpiresIn ?? '15m',
+    }) {
+      const secret = config.auth?.jwtSecret;
+
+      if (!secret) {
+        throw new ServiceError(
+          'JWT secret is not configured',
+          {
+            code: 'AUTH_CONFIGURATION_ERROR',
+            statusCode: 500,
+          },
+        );
+      }
+
+      return jwt.sign(
+        {
+          sub: String(userId),
+          role,
+          type: 'access',
+        },
+        secret,
+        {
+          expiresIn,
+          issuer: config.auth?.issuer ?? 'nexus-os',
+          audience: config.auth?.audience ?? 'nexus-os',
+        },
+      );
+    },
+
+
+    verifyAccessToken(token) {
+      const secret = config.auth?.jwtSecret;
+
+      if (!secret) {
+        throw new ServiceError(
+          'JWT secret is not configured',
+          {
+            code: 'AUTH_CONFIGURATION_ERROR',
+            statusCode: 500,
+          },
+        );
+      }
+
+      try {
+        return jwt.verify(token, secret, {
+          issuer: config.auth?.issuer ?? 'nexus-os',
+          audience: config.auth?.audience ?? 'nexus-os',
+        });
+      } catch {
+        throw new AuthenticationError(
+          'Invalid or expired authentication token',
+        );
+      }
+    },
+
+
+    async getUserById(userId) {
+      const UserModel = requireModel(User, 'User');
+
+      const id = normalizeObjectId(userId, 'User ID');
+
+      const user = await UserModel.findById(id);
+
+      if (!user) {
+        throw new NotFoundError('User');
+      }
+
+      return sanitizeUser(user);
     },
   };
-}
 
 
-/* ================================================================
-   11. CONVERSATION ENGINE
-================================================================ */
+  // ==========================================================
+  // USER SERVICE
+  // ==========================================================
 
-async function getOrCreateDirectConversation(
-  userId,
-  otherUserId
-) {
-  if (
-    String(userId) ===
-    String(otherUserId)
-  ) {
-    throw new AppError(
-      'You cannot create a conversation with yourself.',
-      400,
-      'INVALID_CONVERSATION'
-    );
-  }
+  const UserService = {
 
-  const otherUser =
-    await User.findById(
-      otherUserId
-    ).lean();
-
-  if (!otherUser) {
-    throw new AppError(
-      'The requested user does not exist.',
-      404,
-      'USER_NOT_FOUND'
-    );
-  }
-
-  let conversation =
-    await Conversation.findOne({
-      type: 'direct',
-
-      participants: {
-        $all: [
-          userId,
-          otherUserId,
-        ],
-
-        $size: 2,
-      },
-    });
-
-  if (!conversation) {
-    conversation =
-      await Conversation.create({
-        type: 'direct',
-
-        participants: [
-          userId,
-          otherUserId,
-        ],
-
-        lastMessageAt:
-          new Date(),
-      });
-  }
-
-  return conversation;
-}
+    async getById(userId) {
+      return AuthenticationService.getUserById(userId);
+    },
 
 
-async function getUserConversations(
-  userId
-) {
-  return Conversation.find({
-    participants:
+    async updateProfile({
       userId,
-  })
-    .populate(
-      'participants',
-      'username displayName avatar status customStatus verified'
-    )
-    .populate(
-      'lastMessage'
-    )
-    .sort({
-      updatedAt: -1,
-    })
-    .lean();
-}
-
-
-/* ================================================================
-   12. MESSAGE ENGINE
-================================================================ */
-
-async function sendMessage(
-  userId,
-  {
-    conversationId,
-    content,
-    replyTo = null,
-    type = 'text',
-  }
-) {
-  const cleanContent =
-    normalizeText(
-      content
-    );
-
-  if (
-    type === 'text' &&
-    !cleanContent
-  ) {
-    throw new AppError(
-      'Message content cannot be empty.',
-      400,
-      'EMPTY_MESSAGE'
-    );
-  }
-
-  const conversation =
-    await Conversation.findById(
-      conversationId
-    );
-
-  if (!conversation) {
-    throw new AppError(
-      'Conversation not found.',
-      404,
-      'CONVERSATION_NOT_FOUND'
-    );
-  }
-
-  const participant =
-    conversation.participants.some(
-      id =>
-        String(id) ===
-        String(userId)
-    );
-
-  if (!participant) {
-    throw new AppError(
-      'Conversation access denied.',
-      403,
-      'CONVERSATION_ACCESS_DENIED'
-    );
-  }
-
-  const message =
-    await Message.create({
-      conversation:
-        conversationId,
-
-      sender:
-        userId,
-
-      content:
-        cleanContent,
-
-      type,
-
-      replyTo,
-
-      deliveredTo: [
-        userId,
-      ],
-
-      readBy: [
-        {
-          user:
-            userId,
-
-          readAt:
-            new Date(),
-        },
-      ],
-    });
-
-  conversation.lastMessage =
-    message._id;
-
-  conversation.lastMessageAt =
-    new Date();
-
-  await conversation.save();
-
-  await message.populate(
-    'sender',
-    'username displayName avatar'
-  );
-
-  return message;
-}
-
-
-async function getConversationMessages(
-  userId,
-  conversationId,
-  {
-    limit = 50,
-    before = null,
-  } = {}
-) {
-  const conversation =
-    await Conversation.findById(
-      conversationId
-    );
-
-  if (!conversation) {
-    throw new AppError(
-      'Conversation not found.',
-      404,
-      'CONVERSATION_NOT_FOUND'
-    );
-  }
-
-  const allowed =
-    conversation.participants.some(
-      id =>
-        String(id) ===
-        String(userId)
-    );
-
-  if (!allowed) {
-    throw new AppError(
-      'Conversation access denied.',
-      403,
-      'CONVERSATION_ACCESS_DENIED'
-    );
-  }
-
-  const safeLimit =
-    Math.min(
-      Math.max(
-        Number(limit) || 50,
-        1
-      ),
-      100
-    );
-
-  const query = {
-    conversation:
-      conversationId,
-
-    deletedAt:
-      null,
-  };
-
-  if (before) {
-    const date =
-      new Date(before);
-
-    if (
-      !Number.isNaN(
-        date.getTime()
-      )
-    ) {
-      query.createdAt = {
-        $lt: date,
-      };
-    }
-  }
-
-  const messages =
-    await Message.find(
-      query
-    )
-      .populate(
-        'sender',
-        'username displayName avatar'
-      )
-      .populate(
-        'replyTo'
-      )
-      .sort({
-        createdAt: -1,
-      })
-      .limit(
-        safeLimit
-      )
-      .lean();
-
-  return messages.reverse();
-}
-
-
-/* ================================================================
-   13. CONNECTION ENGINE
-================================================================ */
-
-async function sendConnectionRequest(
-  requesterId,
-  recipientId
-) {
-  if (
-    String(requesterId) ===
-    String(recipientId)
-  ) {
-    throw new AppError(
-      'You cannot connect with yourself.',
-      400,
-      'INVALID_CONNECTION_REQUEST'
-    );
-  }
-
-  const recipient =
-    await User.findById(
-      recipientId
-    ).lean();
-
-  if (!recipient) {
-    throw new AppError(
-      'User not found.',
-      404,
-      'USER_NOT_FOUND'
-    );
-  }
-
-  const existing =
-    await Connection.findOne({
-      $or: [
-        {
-          requester:
-            requesterId,
-
-          recipient:
-            recipientId,
-        },
-
-        {
-          requester:
-            recipientId,
-
-          recipient:
-            requesterId,
-        },
-      ],
-    });
-
-  if (existing) {
-    throw new AppError(
-      'A connection relationship already exists.',
-      409,
-      'CONNECTION_ALREADY_EXISTS'
-    );
-  }
-
-  const connection =
-    await Connection.create({
-      requester:
-        requesterId,
-
-      recipient:
-        recipientId,
-
-      status:
-        'pending',
-    });
-
-  await Notification.create({
-    user:
-      recipientId,
-
-    actor:
-      requesterId,
-
-    type:
-      'connection_request',
-
-    connection:
-      connection._id,
-  });
-
-  return connection;
-}
-
-
-async function acceptConnectionRequest(
-  userId,
-  connectionId
-) {
-  const connection =
-    await Connection.findById(
-      connectionId
-    );
-
-  if (!connection) {
-    throw new AppError(
-      'Connection request not found.',
-      404,
-      'CONNECTION_NOT_FOUND'
-    );
-  }
-
-  if (
-    String(
-      connection.recipient
-    ) !==
-    String(userId)
-  ) {
-    throw new AppError(
-      'You cannot accept this request.',
-      403,
-      'CONNECTION_ACCESS_DENIED'
-    );
-  }
-
-  connection.status =
-    'accepted';
-
-  connection.respondedAt =
-    new Date();
-
-  await connection.save();
-
-  return connection;
-}
-
-
-/* ================================================================
-   14. CONNECTION DISCOVERY
-================================================================ */
-
-async function getUserConnections(
-  userId
-) {
-  const connections =
-    await Connection.find({
-      $or: [
-        {
-          requester:
-            userId,
-        },
-
-        {
-          recipient:
-            userId,
-        },
-      ],
-
-      status:
-        'accepted',
-    })
-      .populate(
-        'requester',
-        'username displayName avatar status customStatus'
-      )
-      .populate(
-        'recipient',
-        'username displayName avatar status customStatus'
-      )
-      .sort({
-        updatedAt: -1,
-      })
-      .lean();
-
-  return connections.map(
-    connection => {
-      const other =
-        String(
-          connection.requester?._id
-        ) ===
-        String(userId)
-          ? connection.recipient
-          : connection.requester;
+      changes,
+      actorId,
+      requestId = null,
+    }) {
+      const UserModel = requireModel(User, 'User');
+
+      ensureObject(changes, 'Profile changes');
+
+      const id = normalizeObjectId(userId, 'User ID');
+
+      const user = await UserModel.findById(id);
+
+      if (!user) {
+        throw new NotFoundError('User');
+      }
+
+      const actor = String(actorId);
+
+      if (
+        actor !== String(id) &&
+        !['admin', 'super_admin'].includes(actor)
+      ) {
+        throw new AuthorizationError();
+      }
+
+      const before = sanitizeUser(user);
+
+      const allowedFields = [
+        'name',
+        'phone',
+        'avatar',
+        'bio',
+        'location',
+        'website',
+      ];
+
+      for (const field of allowedFields) {
+        if (Object.prototype.hasOwnProperty.call(changes, field)) {
+          user[field] = changes[field];
+        }
+      }
+
+      user.updatedAt = clock();
+
+      await user.save();
+
+      const after = sanitizeUser(user);
+
+      await writeAudit({
+        actorId,
+        action: 'user.profile.updated',
+        resourceType: 'user',
+        resourceId: id,
+        before,
+        after,
+        requestId,
+      });
+
+      return after;
+    },
+
+
+    async list({
+      page,
+      limit,
+      search,
+      role,
+      status,
+    } = {}) {
+      const UserModel = requireModel(User, 'User');
+
+      const pagination = normalizePagination(page, limit);
+
+      const query = {};
+
+      if (search) {
+        const normalizedSearch = normalizeString(search);
+
+        query.$or = [
+          {
+            name: {
+              $regex: normalizedSearch,
+              $options: 'i',
+            },
+          },
+          {
+            email: {
+              $regex: normalizedSearch,
+              $options: 'i',
+            },
+          },
+        ];
+      }
+
+      if (role) {
+        query.role = ensureUserRole(role);
+      }
+
+      if (status) {
+        query.status = normalizeString(status);
+      }
+
+      const [items, total] = await Promise.all([
+        UserModel
+          .find(query)
+          .sort({ createdAt: -1 })
+          .skip(pagination.skip)
+          .limit(pagination.limit),
+
+        UserModel.countDocuments(query),
+      ]);
 
       return {
-        id:
-          connection._id,
-
-        user:
-          getPublicUser(
-            other
-          ),
-
-        connectedAt:
-          connection.respondedAt ||
-          connection.updatedAt,
+        items: items.map(sanitizeUser),
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          pages: Math.ceil(total / pagination.limit),
+        },
       };
-    }
-  );
-}
-
-
-/* ================================================================
-   15. NOTIFICATION ENGINE
-================================================================ */
-
-async function getNotifications(
-  userId,
-  {
-    limit = 30,
-    unreadOnly = false,
-  } = {}
-) {
-  const safeLimit =
-    Math.min(
-      Math.max(
-        Number(limit) || 30,
-        1
-      ),
-      100
-    );
-
-  const query = {
-    user:
-      userId,
+    },
   };
 
-  if (unreadOnly) {
-    query.readAt =
-      null;
-  }
 
-  return Notification.find(
-    query
-  )
-    .populate(
-      'actor',
-      'username displayName avatar'
-    )
-    .sort({
-      createdAt: -1,
-    })
-    .limit(
-      safeLimit
-    )
-    .lean();
-}
+  // ==========================================================
+  // ADVERTISEMENT SERVICE
+  // ==========================================================
+
+  const AdvertisementService = {
+
+    async create({
+      ownerId,
+      data,
+      requestId = null,
+    }) {
+      const AdvertisementModel =
+        requireModel(Advertisement, 'Advertisement');
+
+      ensureObject(data, 'Advertisement');
+
+      const title = ensureString(data.title, 'Title', {
+        min: 3,
+        max: 200,
+      });
+
+      const description = ensureString(
+        data.description,
+        'Description',
+        {
+          min: 10,
+          max: 10_000,
+        },
+      );
+
+      const advertisement = await AdvertisementModel.create({
+        publicId: createPublicId('ad'),
+        ownerId,
+        title,
+        description,
+        category: normalizeString(data.category),
+        media: Array.isArray(data.media) ? data.media : [],
+        location: data.location ?? null,
+        price: data.price ?? null,
+        currency: data.currency ?? 'NGN',
+        status: 'draft',
+        analytics: {
+          impressions: 0,
+          views: 0,
+          uniqueViews: 0,
+          clicks: 0,
+          enquiries: 0,
+          shares: 0,
+          saves: 0,
+          conversions: 0,
+        },
+        createdAt: clock(),
+        updatedAt: clock(),
+      });
+
+      await writeAudit({
+        actorId: ownerId,
+        action: 'advertisement.created',
+        resourceType: 'advertisement',
+        resourceId: advertisement._id ?? advertisement.id,
+        after: advertisement,
+        requestId,
+      });
+
+      return advertisement;
+    },
 
 
-async function getUnreadNotificationCount(
-  userId
-) {
-  return Notification.countDocuments({
-    user:
+    async getById(advertisementId) {
+      const AdvertisementModel =
+        requireModel(Advertisement, 'Advertisement');
+
+      const id = normalizeObjectId(
+        advertisementId,
+        'Advertisement ID',
+      );
+
+      const advertisement = await AdvertisementModel.findById(id);
+
+      if (!advertisement) {
+        throw new NotFoundError('Advertisement');
+      }
+
+      return advertisement;
+    },
+
+
+    async update({
+      advertisementId,
+      changes,
+      actorId,
+      requestId = null,
+    }) {
+      const AdvertisementModel =
+        requireModel(Advertisement, 'Advertisement');
+
+      ensureObject(changes, 'Advertisement changes');
+
+      const id = normalizeObjectId(
+        advertisementId,
+        'Advertisement ID',
+      );
+
+      const advertisement =
+        await AdvertisementModel.findById(id);
+
+      if (!advertisement) {
+        throw new NotFoundError('Advertisement');
+      }
+
+      if (
+        String(advertisement.ownerId) !== String(actorId)
+      ) {
+        throw new AuthorizationError();
+      }
+
+      const before =
+        typeof advertisement.toObject === 'function'
+          ? advertisement.toObject()
+          : { ...advertisement };
+
+      const editableFields = [
+        'title',
+        'description',
+        'category',
+        'media',
+        'location',
+        'price',
+        'currency',
+      ];
+
+      for (const field of editableFields) {
+        if (
+          Object.prototype.hasOwnProperty.call(
+            changes,
+            field,
+          )
+        ) {
+          advertisement[field] = changes[field];
+        }
+      }
+
+      advertisement.updatedAt = clock();
+
+      await advertisement.save();
+
+      await writeAudit({
+        actorId,
+        action: 'advertisement.updated',
+        resourceType: 'advertisement',
+        resourceId: id,
+        before,
+        after: advertisement,
+        requestId,
+      });
+
+      return advertisement;
+    },
+
+
+    async changeStatus({
+      advertisementId,
+      status,
+      actorId,
+      reason = null,
+      requestId = null,
+    }) {
+      const AdvertisementModel =
+        requireModel(Advertisement, 'Advertisement');
+
+      const id = normalizeObjectId(
+        advertisementId,
+        'Advertisement ID',
+      );
+
+      const normalizedStatus =
+        ensureAdvertisementStatus(status);
+
+      const advertisement =
+        await AdvertisementModel.findById(id);
+
+      if (!advertisement) {
+        throw new NotFoundError('Advertisement');
+      }
+
+      if (
+        String(advertisement.ownerId) !== String(actorId)
+      ) {
+        throw new AuthorizationError();
+      }
+
+      const beforeStatus = advertisement.status;
+
+      advertisement.status = normalizedStatus;
+      advertisement.updatedAt = clock();
+
+      await advertisement.save();
+
+      await writeAudit({
+        actorId,
+        action: 'advertisement.status.changed',
+        resourceType: 'advertisement',
+        resourceId: id,
+        before: {
+          status: beforeStatus,
+        },
+        after: {
+          status: normalizedStatus,
+        },
+        reason,
+        requestId,
+      });
+
+      return advertisement;
+    },
+
+
+    async list({
+      page,
+      limit,
+      search,
+      category,
+      status = 'active',
+      ownerId,
+    } = {}) {
+      const AdvertisementModel =
+        requireModel(Advertisement, 'Advertisement');
+
+      const pagination = normalizePagination(page, limit);
+
+      const query = {};
+
+      if (status) {
+        query.status = ensureAdvertisementStatus(status);
+      }
+
+      if (category) {
+        query.category = normalizeString(category);
+      }
+
+      if (ownerId) {
+        query.ownerId = normalizeObjectId(
+          ownerId,
+          'Owner ID',
+        );
+      }
+
+      if (search) {
+        const normalizedSearch = normalizeString(search);
+
+        query.$or = [
+          {
+            title: {
+              $regex: normalizedSearch,
+              $options: 'i',
+            },
+          },
+          {
+            description: {
+              $regex: normalizedSearch,
+              $options: 'i',
+            },
+          },
+        ];
+      }
+
+      const [items, total] = await Promise.all([
+        AdvertisementModel
+          .find(query)
+          .sort({ createdAt: -1 })
+          .skip(pagination.skip)
+          .limit(pagination.limit),
+
+        AdvertisementModel.countDocuments(query),
+      ]);
+
+      return {
+        items,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          pages: Math.ceil(total / pagination.limit),
+        },
+      };
+    },
+  };
+
+
+  // ==========================================================
+  // ANALYTICS SERVICE
+  // ==========================================================
+
+  const AnalyticsService = {
+
+    async recordEvent({
+      eventType,
+      userId = null,
+      advertisementId = null,
+      entityType = null,
+      entityId = null,
+      sessionId = null,
+      requestId = null,
+      metadata = {},
+      source = 'organic',
+    }) {
+      const AnalyticsEventModel =
+        requireModel(AnalyticsEvent, 'AnalyticsEvent');
+
+      const normalizedType =
+        ensureAnalyticsEventType(eventType);
+
+      const normalizedSource =
+        normalizeString(source) || 'organic';
+
+      assert(
+        ['organic', 'administrative'].includes(
+          normalizedSource,
+        ),
+        'Invalid analytics event source',
+      );
+
+      if (
+        normalizedSource === 'administrative' &&
+        !metadata.reason
+      ) {
+        throw new ValidationError(
+          'Administrative analytics changes require a reason',
+        );
+      }
+
+      const event = await AnalyticsEventModel.create({
+        publicId: createPublicId('evt'),
+        eventType: normalizedType,
+        userId,
+        advertisementId,
+        entityType,
+        entityId,
+        sessionId,
+        requestId,
+        source: normalizedSource,
+        metadata,
+        occurredAt: clock(),
+      });
+
+      return event;
+    },
+
+
+    async recordBatch(events) {
+      const AnalyticsEventModel =
+        requireModel(AnalyticsEvent, 'AnalyticsEvent');
+
+      assert(
+        Array.isArray(events),
+        'Analytics events must be an array',
+      );
+
+      assert(
+        events.length <= MAX_ANALYTICS_BATCH,
+        `Maximum batch size is ${MAX_ANALYTICS_BATCH}`,
+      );
+
+      const documents = events.map((event) => ({
+        publicId: createPublicId('evt'),
+        eventType: ensureAnalyticsEventType(
+          event.eventType,
+        ),
+        userId: event.userId ?? null,
+        advertisementId: event.advertisementId ?? null,
+        entityType: event.entityType ?? null,
+        entityId: event.entityId ?? null,
+        sessionId: event.sessionId ?? null,
+        requestId: event.requestId ?? null,
+        source: event.source ?? 'organic',
+        metadata: event.metadata ?? {},
+        occurredAt: event.occurredAt
+          ? new Date(event.occurredAt)
+          : clock(),
+      }));
+
+      if (documents.length === 0) {
+        return [];
+      }
+
+      return AnalyticsEventModel.insertMany(documents);
+    },
+
+
+    async getAdvertisementAnalytics({
+      advertisementId,
+      ownerId,
+      from,
+      to,
+    }) {
+      const AnalyticsEventModel =
+        requireModel(AnalyticsEvent, 'AnalyticsEvent');
+
+      const AdvertisementModel =
+        requireModel(Advertisement, 'Advertisement');
+
+      const advertisement =
+        await AdvertisementModel.findById(advertisementId);
+
+      if (!advertisement) {
+        throw new NotFoundError('Advertisement');
+      }
+
+      if (
+        String(advertisement.ownerId) !== String(ownerId)
+      ) {
+        throw new AuthorizationError();
+      }
+
+      const query = {
+        advertisementId,
+        source: 'organic',
+      };
+
+      if (from || to) {
+        query.occurredAt = {};
+
+        if (from) {
+          query.occurredAt.$gte = new Date(from);
+        }
+
+        if (to) {
+          query.occurredAt.$lte = new Date(to);
+        }
+      }
+
+      const events =
+        await AnalyticsEventModel.find(query);
+
+      const metrics = {
+        impressions: 0,
+        views: 0,
+        clicks: 0,
+        engagement: 0,
+        conversions: 0,
+        messages: 0,
+        applications: 0,
+        transactions: 0,
+      };
+
+      for (const event of events) {
+        switch (event.eventType) {
+          case 'impression':
+            metrics.impressions += 1;
+            break;
+
+          case 'view':
+            metrics.views += 1;
+            break;
+
+          case 'click':
+            metrics.clicks += 1;
+            break;
+
+          case 'engagement':
+            metrics.engagement += 1;
+            break;
+
+          case 'conversion':
+            metrics.conversions += 1;
+            break;
+
+          case 'message':
+            metrics.messages += 1;
+            break;
+
+          case 'application':
+            metrics.applications += 1;
+            break;
+
+          case 'transaction':
+            metrics.transactions += 1;
+            break;
+
+          default:
+            break;
+        }
+      }
+
+      return {
+        advertisementId,
+        metrics,
+        eventCount: events.length,
+        generatedAt: clock(),
+      };
+    },
+
+
+    async recordAdministrativeAdjustment({
+      actorId,
+      advertisementId,
+      metric,
+      amount,
+      reason,
+      requestId = null,
+    }) {
+      assert(
+        Number.isInteger(amount),
+        'Analytics adjustment amount must be an integer',
+      );
+
+      const normalizedReason = ensureString(
+        reason,
+        'Reason',
+        {
+          min: 5,
+          max: 1_000,
+        },
+      );
+
+      return this.recordEvent({
+        eventType: 'engagement',
+        userId: actorId,
+        advertisementId,
+        source: 'administrative',
+        requestId,
+        metadata: {
+          metric,
+          amount,
+          reason: normalizedReason,
+        },
+      });
+    },
+  };
+
+
+  // ==========================================================
+  // PAYMENT SERVICE
+  // ==========================================================
+
+  const PaymentService = {
+
+    async initialize({
       userId,
+      amount,
+      currency = 'NGN',
+      reference = null,
+      metadata = {},
+    }) {
+      const PaymentModel =
+        requireModel(Payment, 'Payment');
 
-    readAt:
-      null,
+      assert(
+        Number.isInteger(amount) && amount > 0,
+        'Payment amount must be a positive integer',
+      );
+
+      const paymentReference =
+        reference || `NXS-${Date.now()}-${nanoid(10)}`;
+
+      const existing =
+        await PaymentModel.findOne({
+          reference: paymentReference,
+        });
+
+      if (existing) {
+        return existing;
+      }
+
+      const provider =
+        providers.payments;
+
+      if (!provider?.initialize) {
+        throw new ServiceError(
+          'Payment provider is not configured',
+          {
+            code: 'PAYMENT_PROVIDER_UNAVAILABLE',
+            statusCode: 503,
+          },
+        );
+      }
+
+      const providerResponse =
+        await provider.initialize({
+          email: metadata.email,
+          amount,
+          currency,
+          reference: paymentReference,
+          metadata,
+        });
+
+      const payment =
+        await PaymentModel.create({
+          publicId: createPublicId('pay'),
+          userId,
+          reference: paymentReference,
+          amount,
+          currency,
+          status: 'pending',
+          provider: 'paystack',
+          providerResponse,
+          metadata,
+          idempotencyKey: createIdempotencyKey(),
+          createdAt: clock(),
+          updatedAt: clock(),
+        });
+
+      return payment;
+    },
+
+
+    async verify({
+      reference,
+      actorId = null,
+      requestId = null,
+    }) {
+      const PaymentModel =
+        requireModel(Payment, 'Payment');
+
+      const normalizedReference =
+        ensureString(reference, 'Payment reference', {
+          min: 3,
+          max: 200,
+        });
+
+      const payment =
+        await PaymentModel.findOne({
+          reference: normalizedReference,
+        });
+
+      if (!payment) {
+        throw new NotFoundError('Payment');
+      }
+
+      const provider =
+        providers.payments;
+
+      if (!provider?.verify) {
+        throw new ServiceError(
+          'Payment verification provider is not configured',
+          {
+            code: 'PAYMENT_PROVIDER_UNAVAILABLE',
+            statusCode: 503,
+          },
+        );
+      }
+
+      const result =
+        await provider.verify(normalizedReference);
+
+      const verifiedStatus =
+        result?.status === true ||
+        result?.status === 'success' ||
+        result?.data?.status === 'success';
+
+      const beforeStatus = payment.status;
+
+      if (verifiedStatus) {
+        payment.status = 'paid';
+        payment.paidAt = clock();
+      } else {
+        payment.status = 'failed';
+      }
+
+      payment.providerVerification = result;
+      payment.updatedAt = clock();
+
+      await payment.save();
+
+      await writeAudit({
+        actorId,
+        action: 'payment.verified',
+        resourceType: 'payment',
+        resourceId: payment._id ?? payment.id,
+        before: {
+          status: beforeStatus,
+        },
+        after: {
+          status: payment.status,
+        },
+        requestId,
+      });
+
+      return payment;
+    },
+
+
+    async processWebhook({
+      payload,
+      signature,
+      rawBody,
+      requestId = null,
+    }) {
+      const PaymentModel =
+        requireModel(Payment, 'Payment');
+
+      const provider =
+        providers.payments;
+
+      if (!provider?.verifyWebhook) {
+        throw new ServiceError(
+          'Payment webhook verification is not configured',
+          {
+            code: 'PAYMENT_WEBHOOK_UNAVAILABLE',
+            statusCode: 503,
+          },
+        );
+      }
+
+      const valid =
+        await provider.verifyWebhook({
+          payload,
+          signature,
+          rawBody,
+        });
+
+      if (!valid) {
+        throw new AuthenticationError(
+          'Invalid payment webhook signature',
+        );
+      }
+
+      const eventType =
+        payload?.event ||
+        payload?.type;
+
+      const data =
+        payload?.data ||
+        {};
+
+      const reference =
+        data.reference;
+
+      if (!reference) {
+        throw new ValidationError(
+          'Payment webhook does not contain a transaction reference',
+        );
+      }
+
+      const payment =
+        await PaymentModel.findOne({
+          reference,
+        });
+
+      if (!payment) {
+        logger.warn?.(
+          {
+            reference,
+            eventType,
+          },
+          'Received webhook for unknown payment',
+        );
+
+        return {
+          processed: false,
+          reason: 'payment_not_found',
+        };
+      }
+
+      const beforeStatus =
+        payment.status;
+
+      switch (eventType) {
+        case 'charge.success':
+          payment.status = 'paid';
+          payment.paidAt = clock();
+          break;
+
+        case 'charge.failed':
+          payment.status = 'failed';
+          break;
+
+        case 'refund.processed':
+          payment.status = 'refunded';
+          payment.refundedAt = clock();
+          break;
+
+        default:
+          return {
+            processed: false,
+            reason: 'unsupported_event',
+          };
+      }
+
+      payment.providerWebhook = payload;
+      payment.updatedAt = clock();
+
+      await payment.save();
+
+      await writeAudit({
+        action: `payment.webhook.${eventType}`,
+        resourceType: 'payment',
+        resourceId: payment._id ?? payment.id,
+        before: {
+          status: beforeStatus,
+        },
+        after: {
+          status: payment.status,
+        },
+        requestId,
+        metadata: {
+          eventType,
+          reference,
+        },
+      });
+
+      return {
+        processed: true,
+        payment,
+      };
+    },
+
+
+    async getByReference(reference) {
+      const PaymentModel =
+        requireModel(Payment, 'Payment');
+
+      const normalized =
+        ensureString(reference, 'Payment reference');
+
+      const payment =
+        await PaymentModel.findOne({
+          reference: normalized,
+        });
+
+      if (!payment) {
+        throw new NotFoundError('Payment');
+      }
+
+      return payment;
+    },
+  };
+
+
+  // ==========================================================
+  // MESSAGING SERVICE
+  // ==========================================================
+
+  const MessagingService = {
+
+    async createConversation({
+      participantIds,
+      type = 'direct',
+      metadata = {},
+    }) {
+      const ConversationModel =
+        requireModel(
+          Conversation,
+          'Conversation',
+        );
+
+      assert(
+        Array.isArray(participantIds),
+        'Participant IDs must be an array',
+      );
+
+      const uniqueParticipants = [
+        ...new Set(
+          participantIds.map(String),
+        ),
+      ];
+
+      assert(
+        uniqueParticipants.length >= 2,
+        'A conversation requires at least two participants',
+      );
+
+      const conversation =
+        await ConversationModel.create({
+          publicId: createPublicId('conv'),
+          type,
+          participantIds: uniqueParticipants,
+          metadata,
+          status: 'active',
+          createdAt: clock(),
+          updatedAt: clock(),
+        });
+
+      return conversation;
+    },
+
+
+    async sendMessage({
+      conversationId,
+      senderId,
+      content,
+      attachments = [],
+      metadata = {},
+    }) {
+      const MessageModel =
+        requireModel(Message, 'Message');
+
+      const ConversationModel =
+        requireModel(
+          Conversation,
+          'Conversation',
+        );
+
+      const normalizedContent =
+        ensureString(content, 'Message content', {
+          min: 1,
+          max: MAX_MESSAGE_LENGTH,
+        });
+
+      const conversation =
+        await ConversationModel.findById(
+          conversationId,
+        );
+
+      if (!conversation) {
+        throw new NotFoundError(
+          'Conversation',
+        );
+      }
+
+      const participantIds =
+        conversation.participantIds
+          ?.map(String) ?? [];
+
+      if (
+        !participantIds.includes(
+          String(senderId),
+        )
+      ) {
+        throw new AuthorizationError(
+          'You are not a participant in this conversation',
+        );
+      }
+
+      const message =
+        await MessageModel.create({
+          publicId: createPublicId('msg'),
+          conversationId,
+          senderId,
+          content: normalizedContent,
+          attachments: Array.isArray(attachments)
+            ? attachments
+            : [],
+          metadata,
+          status: 'sent',
+          createdAt: clock(),
+          updatedAt: clock(),
+        });
+
+      conversation.lastMessageId =
+        message._id ?? message.id;
+
+      conversation.lastMessageAt =
+        clock();
+
+      conversation.updatedAt =
+        clock();
+
+      await conversation.save();
+
+      return sanitizeMessage(message);
+    },
+
+
+    async markDelivered({
+      messageId,
+      userId,
+    }) {
+      const MessageModel =
+        requireModel(Message, 'Message');
+
+      const message =
+        await MessageModel.findById(
+          messageId,
+        );
+
+      if (!message) {
+        throw new NotFoundError('Message');
+      }
+
+      if (
+        String(message.senderId) ===
+        String(userId)
+      ) {
+        return sanitizeMessage(message);
+      }
+
+      message.status =
+        ensureMessageStatus('delivered');
+
+      message.deliveredAt =
+        clock();
+
+      message.updatedAt =
+        clock();
+
+      await message.save();
+
+      return sanitizeMessage(message);
+    },
+
+
+    async markRead({
+      messageId,
+      userId,
+    }) {
+      const MessageModel =
+        requireModel(Message, 'Message');
+
+      const message =
+        await MessageModel.findById(
+          messageId,
+        );
+
+      if (!message) {
+        throw new NotFoundError('Message');
+      }
+
+      message.status =
+        ensureMessageStatus('read');
+
+      message.readAt =
+        clock();
+
+      message.readBy =
+        userId;
+
+      message.updatedAt =
+        clock();
+
+      await message.save();
+
+      return sanitizeMessage(message);
+    },
+
+
+    async getConversationMessages({
+      conversationId,
+      participantId,
+      page,
+      limit,
+    }) {
+      const MessageModel =
+        requireModel(Message, 'Message');
+
+      const ConversationModel =
+        requireModel(
+          Conversation,
+          'Conversation',
+        );
+
+      const conversation =
+        await ConversationModel.findById(
+          conversationId,
+        );
+
+      if (!conversation) {
+        throw new NotFoundError(
+          'Conversation',
+        );
+      }
+
+      const participants =
+        conversation.participantIds
+          ?.map(String) ?? [];
+
+      if (
+        !participants.includes(
+          String(participantId),
+        )
+      ) {
+        throw new AuthorizationError();
+      }
+
+      const pagination =
+        normalizePagination(
+          page,
+          limit,
+        );
+
+      const query = {
+        conversationId,
+      };
+
+      const [items, total] =
+        await Promise.all([
+          MessageModel
+            .find(query)
+            .sort({
+              createdAt: -1,
+            })
+            .skip(
+              pagination.skip,
+            )
+            .limit(
+              pagination.limit,
+            ),
+
+          MessageModel.countDocuments(
+            query,
+          ),
+        ]);
+
+      return {
+        items: items.map(
+          sanitizeMessage,
+        ),
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          pages: Math.ceil(
+            total /
+            pagination.limit,
+          ),
+        },
+      };
+    },
+  };
+
+
+  // ==========================================================
+  // NOTIFICATION SERVICE
+  // ==========================================================
+
+  const NotificationService = {
+
+    async create({
+      userId,
+      type,
+      title,
+      message,
+      data = {},
+      priority = 'normal',
+    }) {
+      const NotificationModel =
+        requireModel(
+          Notification,
+          'Notification',
+        );
+
+      const notification =
+        await NotificationModel.create({
+          publicId: createPublicId('ntf'),
+          userId,
+          type: ensureString(
+            type,
+            'Notification type',
+            {
+              max: 100,
+            },
+          ),
+          title: ensureString(
+            title,
+            'Notification title',
+            {
+              max: 200,
+            },
+          ),
+          message: ensureString(
+            message,
+            'Notification message',
+            {
+              max: 2_000,
+            },
+          ),
+          data,
+          priority,
+          read: false,
+          createdAt: clock(),
+          updatedAt: clock(),
+        });
+
+      return notification;
+    },
+
+
+    async list({
+      userId,
+      page,
+      limit,
+      unreadOnly = false,
+    }) {
+      const NotificationModel =
+        requireModel(
+          Notification,
+          'Notification',
+        );
+
+      const pagination =
+        normalizePagination(
+          page,
+          limit,
+        );
+
+      const query = {
+        userId,
+      };
+
+      if (unreadOnly) {
+        query.read = false;
+      }
+
+      const [items, total] =
+        await Promise.all([
+          NotificationModel
+            .find(query)
+            .sort({
+              createdAt: -1,
+            })
+            .skip(
+              pagination.skip,
+            )
+            .limit(
+              pagination.limit,
+            ),
+
+          NotificationModel.countDocuments(
+            query,
+          ),
+        ]);
+
+      return {
+        items,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          pages: Math.ceil(
+            total /
+            pagination.limit,
+          ),
+        },
+      };
+    },
+
+
+    async markRead({
+      notificationId,
+      userId,
+    }) {
+      const NotificationModel =
+        requireModel(
+          Notification,
+          'Notification',
+        );
+
+      const notification =
+        await NotificationModel.findById(
+          notificationId,
+        );
+
+      if (!notification) {
+        throw new NotFoundError(
+          'Notification',
+        );
+      }
+
+      if (
+        String(notification.userId) !==
+        String(userId)
+      ) {
+        throw new AuthorizationError();
+      }
+
+      notification.read = true;
+      notification.readAt = clock();
+      notification.updatedAt = clock();
+
+      await notification.save();
+
+      return notification;
+    },
+  };
+
+
+  // ==========================================================
+  // PROFILE / PROFESSIONAL SERVICE
+  // ==========================================================
+
+  const ProfileService = {
+
+    async getByUserId(userId) {
+      const ProfileModel =
+        requireModel(
+          Profile,
+          'Profile',
+        );
+
+      const profile =
+        await ProfileModel.findOne({
+          userId,
+        });
+
+      if (!profile) {
+        throw new NotFoundError(
+          'Profile',
+        );
+      }
+
+      return profile;
+    },
+
+
+    async upsert({
+      userId,
+      data,
+      actorId,
+      requestId = null,
+    }) {
+      const ProfileModel =
+        requireModel(
+          Profile,
+          'Profile',
+        );
+
+      ensureObject(
+        data,
+        'Profile data',
+      );
+
+      if (
+        String(userId) !==
+        String(actorId)
+      ) {
+        throw new AuthorizationError();
+      }
+
+      const before =
+        await ProfileModel.findOne({
+          userId,
+        });
+
+      const profile =
+        await ProfileModel.findOneAndUpdate(
+          { userId },
+          {
+            $set: {
+              ...data,
+              userId,
+              updatedAt: clock(),
+            },
+            $setOnInsert: {
+              publicId: createPublicId('prf'),
+              createdAt: clock(),
+            },
+          },
+          {
+            new: true,
+            upsert: true,
+          },
+        );
+
+      await writeAudit({
+        actorId,
+        action: 'profile.updated',
+        resourceType: 'profile',
+        resourceId:
+          profile._id ?? profile.id,
+        before,
+        after: profile,
+        requestId,
+      });
+
+      return profile;
+    },
+  };
+
+
+  // ==========================================================
+  // ORGANIZATION SERVICE
+  // ==========================================================
+
+  const OrganizationService = {
+
+    async create({
+      ownerId,
+      name,
+      description = '',
+      type = 'business',
+      metadata = {},
+      requestId = null,
+    }) {
+      const OrganizationModel =
+        requireModel(
+          Organization,
+          'Organization',
+        );
+
+      const normalizedName =
+        ensureString(
+          name,
+          'Organization name',
+          {
+            min: 2,
+            max: 200,
+          },
+        );
+
+      const organization =
+        await OrganizationModel.create({
+          publicId: createPublicId('org'),
+          ownerId,
+          name: normalizedName,
+          description:
+            normalizeString(
+              description,
+            ),
+          type,
+          metadata,
+          status: 'active',
+          createdAt: clock(),
+          updatedAt: clock(),
+        });
+
+      await writeAudit({
+        actorId: ownerId,
+        action: 'organization.created',
+        resourceType: 'organization',
+        resourceId:
+          organization._id ??
+          organization.id,
+        after: organization,
+        requestId,
+      });
+
+      return organization;
+    },
+
+
+    async getById(organizationId) {
+      const OrganizationModel =
+        requireModel(
+          Organization,
+          'Organization',
+        );
+
+      const organization =
+        await OrganizationModel.findById(
+          organizationId,
+        );
+
+      if (!organization) {
+        throw new NotFoundError(
+          'Organization',
+        );
+      }
+
+      return organization;
+    },
+  };
+
+
+  // ==========================================================
+  // ADMINISTRATION SERVICE
+  // ==========================================================
+
+  const AdminService = {
+
+    async requireAdministrator(user) {
+      const role =
+        normalizeString(
+          user?.role,
+        ).toLowerCase();
+
+      if (
+        !['admin', 'super_admin']
+          .includes(role)
+      ) {
+        throw new AuthorizationError(
+          'Administrator privileges are required',
+        );
+      }
+
+      return true;
+    },
+
+
+    async adjustAdvertisementMetric({
+      administrator,
+      advertisementId,
+      metric,
+      amount,
+      reason,
+      requestId = null,
+    }) {
+      await this.requireAdministrator(
+        administrator,
+      );
+
+      const AdvertisementModel =
+        requireModel(
+          Advertisement,
+          'Advertisement',
+        );
+
+      const advertisement =
+        await AdvertisementModel.findById(
+          advertisementId,
+        );
+
+      if (!advertisement) {
+        throw new NotFoundError(
+          'Advertisement',
+        );
+      }
+
+      assert(
+        Number.isInteger(amount),
+        'Adjustment amount must be an integer',
+      );
+
+      const normalizedMetric =
+        ensureString(
+          metric,
+          'Metric',
+          {
+            max: 100,
+          },
+        );
+
+      const currentValue =
+        Number(
+          advertisement.analytics?.[
+            normalizedMetric
+          ] ?? 0,
+        );
+
+      const newValue =
+        Math.max(
+          currentValue + amount,
+          0,
+        );
+
+      if (!advertisement.analytics) {
+        advertisement.analytics = {};
+      }
+
+      advertisement.analytics[
+        normalizedMetric
+      ] = newValue;
+
+      advertisement.updatedAt =
+        clock();
+
+      await advertisement.save();
+
+      await writeAudit({
+        actorId:
+          administrator._id ??
+          administrator.id,
+        action:
+          'advertisement.analytics.adjusted',
+        resourceType:
+          'advertisement',
+        resourceId:
+          advertisementId,
+        before: {
+          [normalizedMetric]:
+            currentValue,
+        },
+        after: {
+          [normalizedMetric]:
+            newValue,
+        },
+        reason,
+        requestId,
+        metadata: {
+          adjustmentAmount:
+            amount,
+        },
+      });
+
+      return {
+        advertisementId,
+        metric: normalizedMetric,
+        oldValue: currentValue,
+        newValue,
+        adjustment: amount,
+      };
+    },
+
+
+    async getAuditLog({
+      resourceType,
+      resourceId,
+      page,
+      limit,
+    } = {}) {
+      const AuditLogModel =
+        requireModel(
+          AuditLog,
+          'AuditLog',
+        );
+
+      const pagination =
+        normalizePagination(
+          page,
+          limit,
+        );
+
+      const query = {};
+
+      if (resourceType) {
+        query.resourceType =
+          normalizeString(
+            resourceType,
+          );
+      }
+
+      if (resourceId) {
+        query.resourceId =
+          normalizeObjectId(
+            resourceId,
+            'Resource ID',
+          );
+      }
+
+      const [items, total] =
+        await Promise.all([
+          AuditLogModel
+            .find(query)
+            .sort({
+              createdAt: -1,
+            })
+            .skip(
+              pagination.skip,
+            )
+            .limit(
+              pagination.limit,
+            ),
+
+          AuditLogModel.countDocuments(
+            query,
+          ),
+        ]);
+
+      return {
+        items,
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total,
+          pages: Math.ceil(
+            total /
+            pagination.limit,
+          ),
+        },
+      };
+    },
+  };
+
+
+  // ==========================================================
+  // STORAGE / CLOUDINARY SERVICE
+  // ==========================================================
+
+  const StorageService = {
+
+    async upload({
+      file,
+      folder,
+      resourceType = 'auto',
+      metadata = {},
+    }) {
+      const storage =
+        providers.storage;
+
+      if (!storage?.upload) {
+        throw new ServiceError(
+          'Storage provider is not configured',
+          {
+            code: 'STORAGE_PROVIDER_UNAVAILABLE',
+            statusCode: 503,
+          },
+        );
+      }
+
+      assert(
+        file,
+        'File is required',
+      );
+
+      return storage.upload({
+        file,
+        folder:
+          folder ||
+          config.storage?.defaultFolder ||
+          'nexus',
+        resourceType,
+        metadata,
+      });
+    },
+
+
+    async delete({
+      publicId,
+      resourceType = 'image',
+    }) {
+      const storage =
+        providers.storage;
+
+      if (!storage?.delete) {
+        throw new ServiceError(
+          'Storage provider is not configured',
+          {
+            code: 'STORAGE_PROVIDER_UNAVAILABLE',
+            statusCode: 503,
+          },
+        );
+      }
+
+      return storage.delete({
+        publicId,
+        resourceType,
+      });
+    },
+  };
+
+
+  // ==========================================================
+  // SERVICE EVENT HELPERS
+  // ==========================================================
+
+  const EventService = {
+
+    async emit({
+      event,
+      payload,
+    }) {
+      const eventBus =
+        providers.events;
+
+      if (!eventBus?.emit) {
+        logger.debug?.(
+          {
+            event,
+          },
+          'No event provider configured',
+        );
+
+        return false;
+      }
+
+      await eventBus.emit(
+        event,
+        payload,
+      );
+
+      return true;
+    },
+  };
+
+
+  // ==========================================================
+  // SERVICE HEALTH
+  // ==========================================================
+
+  const HealthService = {
+
+    async check() {
+      const checks = {};
+
+      if (User) {
+        try {
+          if (typeof User.exists === 'function') {
+            await User.exists({});
+          }
+
+          checks.database =
+            'operational';
+        } catch (error) {
+          checks.database =
+            'unavailable';
+
+          logger.error?.(
+            {
+              error,
+            },
+            'Database health check failed',
+          );
+        }
+      } else {
+        checks.database =
+          'not-configured';
+      }
+
+      checks.configuration =
+        config
+          ? 'loaded'
+          : 'not-configured';
+
+      checks.realtime =
+        providers.realtime
+          ? 'configured'
+          : 'not-configured';
+
+      const healthy =
+        !Object.values(checks)
+          .some(
+            (value) =>
+              value === 'unavailable',
+          );
+
+      return {
+        status: healthy
+          ? 'operational'
+          : 'degraded',
+        checks,
+        timestamp: clock().toISOString(),
+      };
+    },
+  };
+
+
+  // ==========================================================
+  // RETURN PUBLIC SERVICE CONTAINER
+  // ==========================================================
+
+  return Object.freeze({
+
+    AuthenticationService,
+    UserService,
+    ProfileService,
+
+    AdvertisementService,
+    AnalyticsService,
+
+    PaymentService,
+
+    MessagingService,
+    NotificationService,
+
+    OrganizationService,
+
+    AdminService,
+
+    StorageService,
+
+    EventService,
+
+    HealthService,
+
+    /**
+     * Shared utility methods intentionally exposed only where
+     * they are useful to upper application layers.
+     */
+    utils: Object.freeze({
+      createRequestId,
+      createPublicId,
+      createIdempotencyKey,
+      normalizeEmail,
+      normalizePagination,
+      sanitizeUser,
+    }),
   });
 }
 
 
-async function markNotificationAsRead(
-  userId,
-  notificationId
-) {
-  const notification =
-    await Notification.findOne({
-      _id:
-        notificationId,
-
-      user:
-        userId,
-    });
-
-  if (!notification) {
-    throw new AppError(
-      'Notification not found.',
-      404,
-      'NOTIFICATION_NOT_FOUND'
-    );
-  }
-
-  if (!notification.readAt) {
-    notification.readAt =
-      new Date();
-
-    await notification.save();
-  }
-
-  return notification;
-}
-
-
-/* ================================================================
-   16. GROUP ENGINE
-================================================================ */
-
-async function createGroup(
-  userId,
-  {
-    name,
-    description = '',
-    privacy = 'private',
-    memberIds = [],
-  } = {}
-) {
-  const cleanName =
-    normalizeText(
-      name
-    );
-
-  if (
-    cleanName.length < 3 ||
-    cleanName.length > 100
-  ) {
-    throw new AppError(
-      'Group name must contain between 3 and 100 characters.',
-      400,
-      'INVALID_GROUP_NAME'
-    );
-  }
-
-  const cleanDescription =
-    normalizeText(
-      description
-    );
-
-  if (
-    cleanDescription.length >
-    1000
-  ) {
-    throw new AppError(
-      'Group description cannot exceed 1000 characters.',
-      400,
-      'INVALID_GROUP_DESCRIPTION'
-    );
-  }
-
-  if (
-    ![
-      'private',
-      'public',
-    ].includes(
-      privacy
-    )
-  ) {
-    throw new AppError(
-      'Invalid group privacy setting.',
-      400,
-      'INVALID_GROUP_PRIVACY'
-    );
-  }
-
-  const members =
-    [
-      userId,
-      ...Array.isArray(
-        memberIds
-      )
-        ? memberIds
-        : [],
-    ];
-
-  const uniqueMembers =
-    [
-      ...new Set(
-        members.map(
-          String
-        )
-      ),
-    ];
-
-  const group =
-    await Group.create({
-      name:
-        cleanName,
-
-      description:
-        cleanDescription,
-
-      privacy,
-
-      owner:
-        userId,
-
-      members:
-        uniqueMembers.map(
-          memberId => ({
-            user:
-              memberId,
-
-            role:
-              String(
-                memberId
-              ) ===
-              String(userId)
-                ? 'owner'
-                : 'member',
-
-            joinedAt:
-              new Date(),
-          })
-        ),
-    });
-
-  return group;
-}
-
-
-/* ================================================================
-   17. DASHBOARD INTELLIGENCE
-================================================================ */
-
-/**
- * Generates a compact data package for the Nexus frontend.
- *
- * This is useful for an advanced dashboard because the frontend
- * can request one endpoint instead of making many separate calls.
- */
-async function getDashboardData(
-  userId
-) {
-  const [
-    user,
-    connections,
-    notifications,
-    unreadNotifications,
-    conversations,
-  ] = await Promise.all([
-    getCurrentUser(
-      userId
-    ),
-
-    getUserConnections(
-      userId
-    ),
-
-    getNotifications(
-      userId,
-      {
-        limit: 8,
-      }
-    ),
-
-    getUnreadNotificationCount(
-      userId
-    ),
-
-    getUserConversations(
-      userId
-    ),
-  ]);
-
-  return {
-    success:
-      true,
-
-    user,
-
-    overview: {
-      connections:
-        connections.length,
-
-      conversations:
-        conversations.length,
-
-      notifications:
-        notifications.length,
-
-      unreadNotifications,
-    },
-
-    connections:
-      connections.slice(
-        0,
-        8
-      ),
-
-    notifications,
-
-    conversations:
-      conversations.slice(
-        0,
-        8
-      ),
-
-    platform: {
-      name:
-        'Nexus Connect',
-
-      version:
-        '2030.1',
-
-      status:
-        'operational',
-    },
-  };
-}
-
-
-/* ================================================================
-   18. PLATFORM STATISTICS
-================================================================ */
-
-async function getPlatformStatistics() {
-  const [
-    users,
-    connections,
-    conversations,
-    messages,
-    groups,
-  ] = await Promise.all([
-    User.countDocuments(),
-
-    Connection.countDocuments({
-      status:
-        'accepted',
-    }),
-
-    Conversation.countDocuments(),
-
-    Message.countDocuments(),
-
-    Group.countDocuments(),
-  ]);
-
-  return {
-    success:
-      true,
-
-    statistics: {
-      users,
-      verifiedConnections:
-        connections,
-
-      conversations,
-      messages,
-      groups,
-    },
-
-    platform: {
-      name:
-        'Nexus Connect',
-
-      generation:
-        '2030',
-
-      status:
-        'operational',
-    },
-  };
-}
-
-
-/* ================================================================
-   19. ONLINE PRESENCE
-================================================================ */
-
-async function setUserOnline(
-  userId
-) {
-  return User.findByIdAndUpdate(
-    userId,
-    {
-      $set: {
-        status:
-          'online',
-
-        lastSeenAt:
-          new Date(),
-      },
-    },
-    {
-      new: true,
-    }
-  );
-}
-
-
-async function setUserOffline(
-  userId
-) {
-  return User.findByIdAndUpdate(
-    userId,
-    {
-      $set: {
-        status:
-          'offline',
-
-        lastSeenAt:
-          new Date(),
-      },
-    },
-    {
-      new: true,
-    }
-  );
-}
-
-
-/* ================================================================
-   20. HEALTH INFORMATION
-================================================================ */
-
-async function getSystemHealth() {
-  const database =
-    await isDatabaseReady();
-
-  return {
-    status:
-      database
-        ? 'operational'
-        : 'degraded',
-
-    database:
-      database
-        ? 'connected'
-        : 'disconnected',
-
-    service:
-      'Nexus Connect Service Engine',
-
-    version:
-      '2030.1',
-
-    timestamp:
-      new Date().toISOString(),
-  };
-}
-
-
-/* ================================================================
-   21. EXPORTS
-================================================================ */
-
-module.exports = {
-
-  /* DATABASE */
-  connectDatabase,
-  disconnectDatabase,
-  isDatabaseReady,
-
-  /* ERRORS */
-  AppError,
-
-  /* CONFIG */
-  getDatabaseUrl,
-  getJWTSecret,
-  getJWTExpiry,
-
-  /* NORMALIZATION */
-  normalizeEmail,
-  normalizeUsername,
-  normalizeText,
-
-  /* VALIDATION */
-  validateEmail,
-  validateUsername,
-  validatePin,
-  validateDisplayName,
-
-  /* SECURITY */
-  generateToken,
-  comparePin,
-  hashPin,
-
-  /* USERS */
-  sanitizeUser,
-  getPublicUser,
-  getCurrentUser,
-  getUserByUsername,
-  updateProfile,
-
-  /* AUTH */
-  registerUser,
-  loginUser,
-
-  /* DISCOVERY */
-  searchUsers,
-  discoverProfessionals,
-
-  /* CONVERSATIONS */
-  getOrCreateDirectConversation,
-  getUserConversations,
-
-  /* MESSAGES */
-  sendMessage,
-  getConversationMessages,
-
-  /* CONNECTIONS */
-  sendConnectionRequest,
-  acceptConnectionRequest,
-  getUserConnections,
-
-  /* NOTIFICATIONS */
-  getNotifications,
-  getUnreadNotificationCount,
-  markNotificationAsRead,
-
-  /* GROUPS */
-  createGroup,
-
-  /* DASHBOARD */
-  getDashboardData,
-
-  /* PLATFORM */
-  getPlatformStatistics,
-
-  /* PRESENCE */
-  setUserOnline,
-  setUserOffline,
-
-  /* HEALTH */
-  getSystemHealth,
-};
-
-
-/* ================================================================
-   NEXUS CONNECT 2030
-   END OF SERVICE ENGINE
-================================================================ */
+// ============================================================
+// DEFAULT EXPORT
+// ============================================================
+//
+// The application should normally create its service container
+// through createServices(...) after loading config and models.
+//
+// Keeping the factory as the primary export prevents this layer
+// from secretly creating database connections or providers.
+//
+
+export default createServices;
