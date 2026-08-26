@@ -1,759 +1,1833 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+  <meta charset="UTF-8" />
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1, viewport-fit=cover"
-    >
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
 
-    <meta
-        name="theme-color"
-        content="#0b1020"
-    >
+  <meta
+    name="description"
+    content="NEXUS OS — Nexus Buildsolutions Limited unified digital operating platform."
+  />
 
-    <meta
-        name="description"
-        content="Nexus Connect — communication, collaboration and professional networking."
-    >
+  <meta
+    name="application-name"
+    content="NEXUS OS"
+  />
 
-    <meta
-        name="application-name"
-        content="Nexus Connect"
-    >
+  <meta
+    name="theme-color"
+    content="#0b1020"
+  />
 
-    <title>Nexus Connect</title>
+  <meta
+    name="color-scheme"
+    content="dark light"
+  />
 
-    <link rel="stylesheet" href="/css/app.css">
+  <meta
+    name="robots"
+    content="index, follow"
+  />
+
+  <link
+    rel="icon"
+    type="image/svg+xml"
+    href="/assets/logo/favicon.svg"
+  />
+
+  <link
+    rel="stylesheet"
+    href="/css/app.css"
+  />
+
+  <title>NEXUS OS</title>
 </head>
 
 <body>
 
-<div id="app" class="app-shell">
-
-    <!-- =========================================================
-         AUTHENTICATION
-    ========================================================== -->
-
-    <section id="auth-screen" class="auth-screen" aria-label="Nexus Connect authentication">
-
-        <div class="auth-background"></div>
-
-        <div class="auth-container">
-
-            <div class="brand-mark">
-                <div class="brand-symbol">N</div>
-                <div>
-                    <strong>NEXUS</strong>
-                    <span>CONNECT</span>
-                </div>
-            </div>
-
-            <!-- LOGIN -->
-
-            <div id="login-view" class="auth-card">
-
-                <div class="auth-heading">
-                    <span class="eyebrow">NEXUS CONNECT</span>
-                    <h1>Welcome back</h1>
-                    <p>Sign in securely to your Nexus network.</p>
-                </div>
-
-                <form id="login-form" novalidate>
-
-                    <label class="field">
-                        <span>Username or email</span>
-                        <input
-                            id="login-identifier"
-                            name="identifier"
-                            type="text"
-                            autocomplete="username"
-                            maxlength="120"
-                            placeholder="@username or email"
-                            required
-                        >
-                    </label>
-
-                    <label class="field">
-                        <span>4-digit PIN</span>
-
-                        <input
-                            id="login-pin"
-                            name="pin"
-                            type="password"
-                            inputmode="numeric"
-                            autocomplete="current-password"
-                            pattern="[0-9]{4}"
-                            maxlength="4"
-                            placeholder="••••"
-                            required
-                        >
-                    </label>
-
-                    <div id="login-error" class="form-message error" role="alert"></div>
-
-                    <button
-                        type="submit"
-                        class="primary-button full-width"
-                        id="login-submit"
-                    >
-                        <span>Continue</span>
-                    </button>
-
-                </form>
-
-                <div class="auth-divider">
-                    <span>New to Nexus Connect?</span>
-                </div>
-
-                <button
-                    type="button"
-                    class="secondary-button full-width"
-                    data-auth-view="register"
-                >
-                    Create Account
-                </button>
-
-            </div>
-
-            <!-- REGISTER -->
-
-            <div id="register-view" class="auth-card hidden">
-
-                <div class="auth-heading">
-                    <span class="eyebrow">CREATE YOUR IDENTITY</span>
-                    <h1>Create your account</h1>
-                    <p>Your Nexus identity starts here.</p>
-                </div>
-
-                <form id="register-form" novalidate>
-
-                    <label class="field">
-                        <span>Email</span>
-                        <input
-                            id="register-email"
-                            name="email"
-                            type="email"
-                            autocomplete="email"
-                            maxlength="254"
-                            placeholder="you@example.com"
-                            required
-                        >
-                    </label>
-
-                    <label class="field">
-                        <span>Username</span>
-                        <input
-                            id="register-username"
-                            name="username"
-                            type="text"
-                            autocomplete="username"
-                            maxlength="30"
-                            placeholder="yourusername"
-                            required
-                        >
-                        <small>3–30 characters. Letters, numbers and underscores.</small>
-                    </label>
-
-                    <label class="field">
-                        <span>Display name</span>
-                        <input
-                            id="register-display-name"
-                            name="displayName"
-                            type="text"
-                            autocomplete="name"
-                            maxlength="80"
-                            placeholder="Your name"
-                            required
-                        >
-                    </label>
-
-                    <div class="pin-grid">
-
-                        <label class="field">
-                            <span>Create PIN</span>
-                            <input
-                                id="register-pin"
-                                name="pin"
-                                type="password"
-                                inputmode="numeric"
-                                maxlength="4"
-                                pattern="[0-9]{4}"
-                                autocomplete="new-password"
-                                placeholder="••••"
-                                required
-                            >
-                        </label>
-
-                        <label class="field">
-                            <span>Confirm PIN</span>
-                            <input
-                                id="register-pin-confirm"
-                                name="pinConfirm"
-                                type="password"
-                                inputmode="numeric"
-                                maxlength="4"
-                                pattern="[0-9]{4}"
-                                autocomplete="new-password"
-                                placeholder="••••"
-                                required
-                            >
-                        </label>
-
-                    </div>
-
-                    <div id="register-error" class="form-message error" role="alert"></div>
-
-                    <button
-                        type="submit"
-                        class="primary-button full-width"
-                        id="register-submit"
-                    >
-                        Create Account
-                    </button>
-
-                </form>
-
-                <button
-                    type="button"
-                    class="text-button"
-                    data-auth-view="login"
-                >
-                    Already have an account? Sign in
-                </button>
-
-            </div>
-
-        </div>
-    </section>
-
-
-    <!-- =========================================================
-         MAIN APPLICATION
-    ========================================================== -->
-
-    <section id="main-app" class="main-app hidden">
-
-        <!-- Desktop sidebar -->
-
-        <aside id="sidebar" class="sidebar">
-
-            <div class="sidebar-brand">
-                <div class="brand-symbol small">N</div>
-                <div class="brand-name">
-                    <strong>NEXUS</strong>
-                    <span>CONNECT</span>
-                </div>
-            </div>
-
-            <nav class="main-navigation" aria-label="Main navigation">
-
-                <button class="nav-item active" data-view="home">
-                    <span class="nav-icon">⌂</span>
-                    <span>Home</span>
-                </button>
-
-                <button class="nav-item" data-view="messages">
-                    <span class="nav-icon">◌</span>
-                    <span>Messages</span>
-                    <span class="nav-badge hidden" id="message-badge">0</span>
-                </button>
-
-                <button class="nav-item" data-view="people">
-                    <span class="nav-icon">♧</span>
-                    <span>People</span>
-                </button>
-
-                <button class="nav-item" data-view="discover">
-                    <span class="nav-icon">◎</span>
-                    <span>Discover</span>
-                </button>
-
-                <button class="nav-item" data-view="groups">
-                    <span class="nav-icon">♧</span>
-                    <span>Communities</span>
-                </button>
-
-                <button class="nav-item" data-view="activity">
-                    <span class="nav-icon">◈</span>
-                    <span>Activity</span>
-                    <span class="nav-badge hidden" id="activity-badge">0</span>
-                </button>
-
-                <button class="nav-item" data-view="media">
-                    <span class="nav-icon">▣</span>
-                    <span>Media</span>
-                </button>
-
-                <button class="nav-item" data-view="ai">
-                    <span class="nav-icon">✦</span>
-                    <span>Nexus AI</span>
-                </button>
-
-            </nav>
-
-            <div class="sidebar-section">
-
-                <button class="nav-item" data-view="saved">
-                    <span class="nav-icon">☆</span>
-                    <span>Saved</span>
-                </button>
-
-                <button class="nav-item" data-view="pinned">
-                    <span class="nav-icon">⌖</span>
-                    <span>Pinned</span>
-                </button>
-
-            </div>
-
-            <div class="sidebar-bottom">
-
-                <button class="nav-item" data-view="settings">
-                    <span class="nav-icon">⚙</span>
-                    <span>Settings</span>
-                </button>
-
-                <button class="nav-item" data-view="help">
-                    <span class="nav-icon">?</span>
-                    <span>Help</span>
-                </button>
-
-            </div>
-
-            <button id="profile-sidebar" class="profile-mini">
-
-                <div id="sidebar-avatar" class="avatar">N</div>
-
-                <div class="profile-mini-info">
-                    <strong id="sidebar-name">Nexus User</strong>
-                    <span>
-                        <i class="online-dot"></i>
-                        Online
-                    </span>
-                </div>
-
-            </button>
-
-        </aside>
-
-
-        <!-- Main content -->
-
-        <main class="content-shell">
-
-            <header class="topbar">
-
-                <button
-                    id="mobile-menu-button"
-                    class="icon-button mobile-only"
-                    aria-label="Open navigation"
-                >
-                    ☰
-                </button>
-
-                <div class="topbar-title">
-                    <strong>Nexus Connect</strong>
-                </div>
-
-                <div class="topbar-actions">
-
-                    <button
-                        id="search-button"
-                        class="icon-button"
-                        aria-label="Search"
-                    >
-                        ⌕
-                    </button>
-
-                    <button
-                        id="quick-action-button"
-                        class="icon-button"
-                        aria-label="Create"
-                    >
-                        ＋
-                    </button>
-
-                    <button
-                        id="notification-button"
-                        class="icon-button notification-trigger"
-                        aria-label="Notifications"
-                    >
-                        ◈
-                        <span id="notification-dot" class="notification-dot hidden"></span>
-                    </button>
-
-                    <button
-                        id="profile-button"
-                        class="avatar-button"
-                        aria-label="Profile"
-                    >
-                        <span id="top-avatar" class="avatar">N</span>
-                    </button>
-
-                </div>
-
-            </header>
-
-
-            <div id="page-content" class="page-content">
-
-                <!-- HOME -->
-
-                <section id="view-home" class="app-view active">
-
-                    <div class="welcome-section">
-
-                        <div>
-                            <span class="eyebrow">YOUR CONNECT</span>
-                            <h1>
-                                Good day,
-                                <span id="welcome-name">there</span>
-                                👋
-                            </h1>
-                            <p>What's happening in your Connect?</p>
-                        </div>
-
-                        <button class="primary-button" data-view="discover">
-                            Find People
-                        </button>
-
-                    </div>
-
-
-                    <div class="dashboard-grid">
-
-                        <article class="dashboard-card activity-summary">
-                            <div class="card-header">
-                                <div>
-                                    <span class="eyebrow">OVERVIEW</span>
-                                    <h2>Your Activity</h2>
-                                </div>
-                            </div>
-
-                            <div class="activity-metrics">
-
-                                <div class="metric">
-                                    <strong id="metric-messages">0</strong>
-                                    <span>Messages</span>
-                                </div>
-
-                                <div class="metric">
-                                    <strong id="metric-connections">0</strong>
-                                    <span>Connections</span>
-                                </div>
-
-                                <div class="metric">
-                                    <strong id="metric-groups">0</strong>
-                                    <span>Groups</span>
-                                </div>
-
-                            </div>
-                        </article>
-
-
-                        <article class="dashboard-card quick-card">
-
-                            <div class="card-header">
-                                <div>
-                                    <span class="eyebrow">QUICK ACTIONS</span>
-                                    <h2>Get started</h2>
-                                </div>
-                            </div>
-
-                            <div class="quick-actions">
-
-                                <button data-action="new-message">
-                                    <span>＋</span>
-                                    New message
-                                </button>
-
-                                <button data-view="people">
-                                    <span>♧</span>
-                                    Find people
-                                </button>
-
-                                <button data-view="ai">
-                                    <span>✦</span>
-                                    Ask Nexus AI
-                                </button>
-
-                            </div>
-
-                        </article>
-
-                    </div>
-
-
-                    <section class="content-section">
-
-                        <div class="section-heading">
-                            <div>
-                                <span class="eyebrow">COMMUNICATION</span>
-                                <h2>Recent Conversations</h2>
-                            </div>
-
-                            <button class="text-button" data-view="messages">
-                                View all
-                            </button>
-                        </div>
-
-                        <div id="recent-conversations" class="conversation-list">
-
-                            <div class="empty-state compact">
-                                <div class="empty-icon">◌</div>
-                                <strong>Your conversations start here.</strong>
-                                <p>Connect with someone and start your first conversation.</p>
-                            </div>
-
-                        </div>
-
-                    </section>
-
-
-                    <section class="content-section">
-
-                        <div class="section-heading">
-                            <div>
-                                <span class="eyebrow">NETWORK</span>
-                                <h2>Suggested Connections</h2>
-                            </div>
-
-                            <button class="text-button" data-view="people">
-                                See people
-                            </button>
-                        </div>
-
-                        <div id="suggested-people" class="people-grid"></div>
-
-                    </section>
-
-                </section>
-
-
-                <!-- OTHER VIEWS -->
-
-                <section id="view-messages" class="app-view"></section>
-                <section id="view-people" class="app-view"></section>
-                <section id="view-discover" class="app-view"></section>
-                <section id="view-groups" class="app-view"></section>
-                <section id="view-activity" class="app-view"></section>
-                <section id="view-media" class="app-view"></section>
-                <section id="view-ai" class="app-view"></section>
-                <section id="view-saved" class="app-view"></section>
-                <section id="view-pinned" class="app-view"></section>
-                <section id="view-settings" class="app-view"></section>
-                <section id="view-help" class="app-view"></section>
-
-            </div>
-
-        </main>
-
-
-        <!-- Mobile bottom navigation -->
-
-        <nav class="mobile-navigation">
-
-            <button data-view="home" class="mobile-nav-item active">
-                <span>⌂</span>
-                Home
-            </button>
-
-            <button data-view="messages" class="mobile-nav-item">
-                <span>◌</span>
-                Chats
-            </button>
-
-            <button id="mobile-create" class="mobile-create">
-                ＋
-            </button>
-
-            <button data-view="discover" class="mobile-nav-item">
-                <span>◎</span>
-                Discover
-            </button>
-
-            <button id="mobile-profile" class="mobile-nav-item">
-                <span>●</span>
-                Me
-            </button>
-
-        </nav>
-
-    </section>
-
-
-    <!-- =========================================================
-         GLOBAL DRAWERS
-    ========================================================== -->
-
-    <div id="drawer-overlay" class="drawer-overlay hidden"></div>
-
-    <aside id="search-drawer" class="drawer drawer-right">
-
-        <div class="drawer-header">
-            <div>
-                <span class="eyebrow">NEXUS SEARCH</span>
-                <h2>Search</h2>
-            </div>
-
-            <button class="icon-button" data-close-drawer>×</button>
-        </div>
-
-        <div class="search-box">
-            <span>⌕</span>
-            <input
-                id="global-search"
-                type="search"
-                placeholder="People, messages, groups..."
-                autocomplete="off"
-            >
-        </div>
-
-        <div id="search-results" class="drawer-content">
-
-            <div class="empty-state">
-                <div class="empty-icon">⌕</div>
-                <strong>Search Nexus Connect</strong>
-                <p>Find people, usernames, conversations and more.</p>
-            </div>
-
-        </div>
-
-    </aside>
-
-
-    <aside id="notification-drawer" class="drawer drawer-right">
-
-        <div class="drawer-header">
-            <div>
-                <span class="eyebrow">UPDATES</span>
-                <h2>Notifications</h2>
-            </div>
-
-            <button class="icon-button" data-close-drawer>×</button>
-        </div>
-
-        <div id="notification-list" class="drawer-content">
-
-            <div class="empty-state">
-                <div class="empty-icon">◈</div>
-                <strong>You're all caught up.</strong>
-                <p>New activity will appear here.</p>
-            </div>
-
-        </div>
-
-    </aside>
-
-
-    <aside id="profile-drawer" class="drawer drawer-right">
-
-        <div class="drawer-header">
-            <div>
-                <span class="eyebrow">ACCOUNT</span>
-                <h2>Your Profile</h2>
-            </div>
-
-            <button class="icon-button" data-close-drawer>×</button>
-        </div>
-
-        <div class="profile-drawer-content">
-
-            <div class="profile-hero">
-
-                <div id="drawer-avatar" class="avatar avatar-xl">N</div>
-
-                <h2 id="drawer-profile-name">Nexus User</h2>
-
-                <p id="drawer-profile-username">@username</p>
-
-                <span class="status-pill">
-                    <i class="online-dot"></i>
-                    Online
-                </span>
-
-            </div>
-
-            <div class="profile-actions">
-
-                <button class="secondary-button" data-view="settings">
-                    Settings
-                </button>
-
-                <button id="logout-button" class="danger-button">
-                    Sign out
-                </button>
-
-            </div>
-
-        </div>
-
-    </aside>
-
-
-    <!-- QUICK ACTION DRAWER -->
-
-    <div id="quick-action-menu" class="quick-action-menu hidden">
-
-        <div class="quick-menu-header">
-            <strong>Quick Actions</strong>
-            <button class="icon-button" data-close-quick>×</button>
-        </div>
-
-        <button data-action="new-message">
-            <span>＋</span>
-            New Message
-        </button>
-
-        <button data-action="create-group">
-            <span>♧</span>
-            Create Group
-        </button>
-
-        <button data-view="ai">
-            <span>✦</span>
-            Open Nexus AI
-        </button>
-
-        <button data-view="settings">
-            <span>⚙</span>
-            Settings
-        </button>
-
-    </div>
-
-
-    <!-- GLOBAL TOAST -->
+  <!--
+    ============================================================
+    APPLICATION ROOT
+    ============================================================
+  -->
+
+  <div
+    id="app"
+    class="app-shell"
+    data-app="nexus-os"
+    data-version="1.0.0"
+    data-environment="production"
+  >
+
+    <!-- ========================================================
+         GLOBAL ACCESSIBILITY / SYSTEM UI
+         ======================================================== -->
+
+    <a
+      href="#main-content"
+      class="skip-link"
+    >
+      Skip to main content
+    </a>
 
     <div
-        id="toast-container"
-        class="toast-container"
-        aria-live="polite"
-        aria-atomic="true"
+      id="app-live-region"
+      class="sr-only"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+
+    <div
+      id="app-error-region"
+      class="sr-only"
+      aria-live="assertive"
+      aria-atomic="true"
     ></div>
 
 
-    <!-- LOADING -->
+    <!-- ========================================================
+         APPLICATION LOADING SCREEN
+         ======================================================== -->
 
-    <div id="global-loader" class="global-loader hidden">
+    <div
+      id="app-loader"
+      class="app-loader"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading NEXUS OS"
+    >
+      <div class="app-loader__brand">
+        <div class="brand-mark brand-mark--loader">
+          <span>N</span>
+        </div>
 
-        <div class="loader-card">
+        <div class="app-loader__identity">
+          <strong>NEXUS</strong>
+          <span>OS</span>
+        </div>
+      </div>
 
-            <div class="loader-spinner"></div>
+      <div
+        class="app-loader__progress"
+        aria-hidden="true"
+      >
+        <span></span>
+      </div>
 
-            <strong id="loader-text">
-                Connecting to Nexus...
+      <p class="app-loader__message">
+        Initializing NEXUS OS…
+      </p>
+    </div>
+
+
+    <!-- ========================================================
+         APPLICATION SIDEBAR
+         ======================================================== -->
+
+    <aside
+      id="app-sidebar"
+      class="app-sidebar"
+      aria-label="Primary navigation"
+      data-component="sidebar"
+    >
+
+      <div class="sidebar__top">
+
+        <a
+          href="/"
+          class="brand"
+          aria-label="NEXUS OS home"
+          data-route="/"
+        >
+          <span class="brand-mark">
+            <span>N</span>
+          </span>
+
+          <span class="brand-wordmark">
+            <strong>NEXUS</strong>
+            <small>OS</small>
+          </span>
+        </a>
+
+        <button
+          id="sidebar-close"
+          class="icon-button sidebar__close"
+          type="button"
+          aria-label="Close navigation"
+          data-action="close-sidebar"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+
+      </div>
+
+
+      <!-- Workspace / identity -->
+
+      <div class="sidebar__workspace">
+
+        <button
+          type="button"
+          class="workspace-switcher"
+          data-action="workspace-switcher"
+          aria-haspopup="menu"
+          aria-expanded="false"
+        >
+
+          <span class="avatar avatar--workspace">
+            N
+          </span>
+
+          <span class="workspace-switcher__content">
+            <strong data-user-name>
+              NEXUS Workspace
             </strong>
+
+            <small data-user-role>
+              Workspace
+            </small>
+          </span>
+
+          <span
+            class="workspace-switcher__chevron"
+            aria-hidden="true"
+          >
+            ˅
+          </span>
+
+        </button>
+
+      </div>
+
+
+      <!-- Main navigation -->
+
+      <nav
+        class="sidebar__navigation"
+        aria-label="Main"
+      >
+
+        <p class="navigation__label">
+          Workspace
+        </p>
+
+        <a
+          href="/"
+          class="nav-item is-active"
+          data-route="/"
+          data-navigation="dashboard"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ◈
+          </span>
+
+          <span class="nav-item__label">
+            Overview
+          </span>
+        </a>
+
+
+        <a
+          href="/connect"
+          class="nav-item"
+          data-route="/connect"
+          data-navigation="connect"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ◎
+          </span>
+
+          <span class="nav-item__label">
+            Connect
+          </span>
+
+          <span
+            class="nav-item__badge"
+            data-connect-count
+            hidden
+          >
+            0
+          </span>
+        </a>
+
+
+        <a
+          href="/professionals"
+          class="nav-item"
+          data-route="/professionals"
+          data-navigation="professionals"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ◉
+          </span>
+
+          <span class="nav-item__label">
+            Professionals
+          </span>
+        </a>
+
+
+        <a
+          href="/services"
+          class="nav-item"
+          data-route="/services"
+          data-navigation="services"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ◇
+          </span>
+
+          <span class="nav-item__label">
+            Services
+          </span>
+        </a>
+
+
+        <a
+          href="/jobs"
+          class="nav-item"
+          data-route="/jobs"
+          data-navigation="jobs"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ◫
+          </span>
+
+          <span class="nav-item__label">
+            Jobs
+          </span>
+        </a>
+
+
+        <a
+          href="/marketplace"
+          class="nav-item"
+          data-route="/marketplace"
+          data-navigation="marketplace"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ◌
+          </span>
+
+          <span class="nav-item__label">
+            Marketplace
+          </span>
+        </a>
+
+
+        <a
+          href="/projects"
+          class="nav-item"
+          data-route="/projects"
+          data-navigation="projects"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ▦
+          </span>
+
+          <span class="nav-item__label">
+            Projects
+          </span>
+        </a>
+
+
+        <a
+          href="/property"
+          class="nav-item"
+          data-route="/property"
+          data-navigation="property"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ⌂
+          </span>
+
+          <span class="nav-item__label">
+            Property
+          </span>
+        </a>
+
+
+        <a
+          href="/construction"
+          class="nav-item"
+          data-route="/construction"
+          data-navigation="construction"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ▰
+          </span>
+
+          <span class="nav-item__label">
+            Construction
+          </span>
+        </a>
+
+
+        <div class="navigation__divider"></div>
+
+        <p class="navigation__label">
+          Intelligence
+        </p>
+
+
+        <a
+          href="/analytics"
+          class="nav-item"
+          data-route="/analytics"
+          data-navigation="analytics"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ◒
+          </span>
+
+          <span class="nav-item__label">
+            Analytics
+          </span>
+        </a>
+
+
+        <a
+          href="/intelligence"
+          class="nav-item"
+          data-route="/intelligence"
+          data-navigation="intelligence"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ✦
+          </span>
+
+          <span class="nav-item__label">
+            Intelligence
+          </span>
+        </a>
+
+
+        <a
+          href="/automation"
+          class="nav-item"
+          data-route="/automation"
+          data-navigation="automation"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ⟳
+          </span>
+
+          <span class="nav-item__label">
+            Automation
+          </span>
+        </a>
+
+      </nav>
+
+
+      <!-- Sidebar bottom -->
+
+      <div class="sidebar__bottom">
+
+        <a
+          href="/notifications"
+          class="nav-item"
+          data-route="/notifications"
+          data-navigation="notifications"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ♢
+          </span>
+
+          <span class="nav-item__label">
+            Notifications
+          </span>
+
+          <span
+            class="nav-item__badge nav-item__badge--notification"
+            data-notification-count
+            hidden
+          >
+            0
+          </span>
+        </a>
+
+
+        <a
+          href="/settings"
+          class="nav-item"
+          data-route="/settings"
+          data-navigation="settings"
+        >
+          <span
+            class="nav-item__icon"
+            aria-hidden="true"
+          >
+            ⚙
+          </span>
+
+          <span class="nav-item__label">
+            Settings
+          </span>
+        </a>
+
+
+        <div class="sidebar__system-status">
+
+          <span
+            class="status-indicator"
+            data-system-status-indicator
+            aria-hidden="true"
+          ></span>
+
+          <span class="sidebar__system-status-text">
+            <strong>System</strong>
+            <small data-system-status>
+              Checking…
+            </small>
+          </span>
 
         </div>
 
+      </div>
+
+    </aside>
+
+
+    <!-- ========================================================
+         SIDEBAR OVERLAY
+         ======================================================== -->
+
+    <div
+      id="sidebar-overlay"
+      class="sidebar-overlay"
+      data-action="close-sidebar"
+      hidden
+    ></div>
+
+
+    <!-- ========================================================
+         MAIN APPLICATION AREA
+         ======================================================== -->
+
+    <div class="app-main">
+
+      <!-- ======================================================
+           HEADER
+           ====================================================== -->
+
+      <header
+        id="app-header"
+        class="app-header"
+      >
+
+        <div class="header__left">
+
+          <button
+            id="sidebar-toggle"
+            class="icon-button header__menu"
+            type="button"
+            aria-label="Open navigation"
+            aria-controls="app-sidebar"
+            aria-expanded="false"
+            data-action="open-sidebar"
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+
+
+          <div class="header__context">
+
+            <span class="header__eyebrow">
+              NEXUS OS
+            </span>
+
+            <h1
+              class="header__title"
+              data-page-title
+            >
+              Overview
+            </h1>
+
+          </div>
+
+        </div>
+
+
+        <div class="header__center">
+
+          <form
+            id="global-search"
+            class="global-search"
+            role="search"
+            novalidate
+          >
+
+            <span
+              class="global-search__icon"
+              aria-hidden="true"
+            >
+              ⌕
+            </span>
+
+            <label
+              for="global-search-input"
+              class="sr-only"
+            >
+              Search NEXUS
+            </label>
+
+            <input
+              id="global-search-input"
+              name="q"
+              type="search"
+              autocomplete="off"
+              placeholder="Search people, services, projects, properties…"
+              data-search-input
+            />
+
+            <kbd class="global-search__shortcut">
+              /
+            </kbd>
+
+          </form>
+
+        </div>
+
+
+        <div class="header__right">
+
+          <!-- Connection -->
+
+          <button
+            type="button"
+            class="connection-status"
+            data-connection-control
+            aria-label="Realtime connection status"
+          >
+            <span
+              class="status-indicator"
+              data-socket-indicator
+              aria-hidden="true"
+            ></span>
+
+            <span
+              class="connection-status__text"
+              data-socket-status
+            >
+              Connecting
+            </span>
+          </button>
+
+
+          <!-- Notifications -->
+
+          <button
+            type="button"
+            class="icon-button notification-button"
+            aria-label="Open notifications"
+            aria-controls="notification-panel"
+            aria-expanded="false"
+            data-action="toggle-notifications"
+          >
+
+            <span aria-hidden="true">
+              ♢
+            </span>
+
+            <span
+              class="notification-button__badge"
+              data-notification-count
+              hidden
+            >
+              0
+            </span>
+
+          </button>
+
+
+          <!-- User -->
+
+          <button
+            type="button"
+            class="user-menu-trigger"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            data-action="toggle-user-menu"
+          >
+
+            <span
+              class="avatar"
+              data-user-avatar
+              aria-hidden="true"
+            >
+              N
+            </span>
+
+            <span class="user-menu-trigger__identity">
+
+              <strong data-user-name>
+                NEXUS User
+              </strong>
+
+              <small data-user-email>
+                Account
+              </small>
+
+            </span>
+
+            <span
+              aria-hidden="true"
+              class="user-menu-trigger__chevron"
+            >
+              ˅
+            </span>
+
+          </button>
+
+        </div>
+
+      </header>
+
+
+      <!-- ======================================================
+           PAGE CONTENT
+           ====================================================== -->
+
+      <main
+        id="main-content"
+        class="app-content"
+        tabindex="-1"
+      >
+
+        <!-- Page announcement / system state -->
+
+        <section
+          id="system-alert"
+          class="system-alert"
+          role="alert"
+          hidden
+        >
+          <div class="system-alert__icon">
+            !
+          </div>
+
+          <div class="system-alert__content">
+            <strong data-system-alert-title>
+              System notification
+            </strong>
+
+            <p data-system-alert-message></p>
+          </div>
+
+          <button
+            type="button"
+            class="icon-button"
+            aria-label="Dismiss notification"
+            data-action="dismiss-system-alert"
+          >
+            ×
+          </button>
+        </section>
+
+
+        <!-- ====================================================
+             HERO / WELCOME
+             ==================================================== -->
+
+        <section
+          class="hero-section"
+          data-section="welcome"
+        >
+
+          <div class="hero-section__content">
+
+            <span class="eyebrow">
+              UNIFIED OPERATING PLATFORM
+            </span>
+
+            <h2>
+              Build. Connect.
+              <span>Move forward.</span>
+            </h2>
+
+            <p>
+              One intelligent environment for people, businesses,
+              professionals, services, projects, property and construction.
+            </p>
+
+            <div class="hero-section__actions">
+
+              <a
+                href="/connect"
+                class="button button--primary"
+                data-route="/connect"
+              >
+                Explore NEXUS Connect
+              </a>
+
+              <button
+                type="button"
+                class="button button--secondary"
+                data-action="open-quick-create"
+              >
+                <span aria-hidden="true">＋</span>
+                Create
+              </button>
+
+            </div>
+
+          </div>
+
+
+          <div
+            class="hero-section__visual"
+            aria-hidden="true"
+          >
+
+            <div class="hero-orbit hero-orbit--one"></div>
+            <div class="hero-orbit hero-orbit--two"></div>
+            <div class="hero-orbit hero-orbit--three"></div>
+
+            <div class="hero-core">
+              <span>N</span>
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- ====================================================
+             PLATFORM STATUS
+             ==================================================== -->
+
+        <section
+          class="status-grid"
+          aria-label="Platform status"
+          data-section="status"
+        >
+
+          <article class="status-card">
+
+            <div class="status-card__icon">
+              ◈
+            </div>
+
+            <div class="status-card__content">
+
+              <span class="status-card__label">
+                Platform
+              </span>
+
+              <strong data-platform-status>
+                Operational
+              </strong>
+
+            </div>
+
+            <span
+              class="status-indicator status-indicator--online"
+              data-platform-status-indicator
+              aria-label="Platform operational"
+            ></span>
+
+          </article>
+
+
+          <article class="status-card">
+
+            <div class="status-card__icon">
+              ◉
+            </div>
+
+            <div class="status-card__content">
+
+              <span class="status-card__label">
+                Realtime
+              </span>
+
+              <strong data-realtime-status>
+                Connecting
+              </strong>
+
+            </div>
+
+            <span
+              class="status-indicator"
+              data-realtime-indicator
+            ></span>
+
+          </article>
+
+
+          <article class="status-card">
+
+            <div class="status-card__icon">
+              ▦
+            </div>
+
+            <div class="status-card__content">
+
+              <span class="status-card__label">
+                Services
+              </span>
+
+              <strong data-service-status>
+                Checking
+              </strong>
+
+            </div>
+
+            <span
+              class="status-indicator"
+              data-service-indicator
+            ></span>
+
+          </article>
+
+        </section>
+
+
+        <!-- ====================================================
+             QUICK ACCESS
+             ==================================================== -->
+
+        <section
+          class="content-section"
+          data-section="quick-access"
+        >
+
+          <div class="section-heading">
+
+            <div>
+              <span class="eyebrow">
+                WORKSPACE
+              </span>
+
+              <h2>
+                Quick access
+              </h2>
+            </div>
+
+            <a
+              href="/services"
+              class="text-link"
+              data-route="/services"
+            >
+              View all
+              <span aria-hidden="true">→</span>
+            </a>
+
+          </div>
+
+
+          <div class="quick-access-grid">
+
+            <a
+              href="/connect"
+              class="quick-card"
+              data-route="/connect"
+            >
+              <span class="quick-card__icon">◎</span>
+              <span class="quick-card__title">Connect</span>
+              <span class="quick-card__description">
+                Discover people and opportunities.
+              </span>
+            </a>
+
+
+            <a
+              href="/services"
+              class="quick-card"
+              data-route="/services"
+            >
+              <span class="quick-card__icon">◇</span>
+              <span class="quick-card__title">Services</span>
+              <span class="quick-card__description">
+                Find professional services.
+              </span>
+            </a>
+
+
+            <a
+              href="/marketplace"
+              class="quick-card"
+              data-route="/marketplace"
+            >
+              <span class="quick-card__icon">◌</span>
+              <span class="quick-card__title">Marketplace</span>
+              <span class="quick-card__description">
+                Explore products and opportunities.
+              </span>
+            </a>
+
+
+            <a
+              href="/projects"
+              class="quick-card"
+              data-route="/projects"
+            >
+              <span class="quick-card__icon">▦</span>
+              <span class="quick-card__title">Projects</span>
+              <span class="quick-card__description">
+                Manage projects and activities.
+              </span>
+            </a>
+
+
+            <a
+              href="/property"
+              class="quick-card"
+              data-route="/property"
+            >
+              <span class="quick-card__icon">⌂</span>
+              <span class="quick-card__title">Property</span>
+              <span class="quick-card__description">
+                Discover property opportunities.
+              </span>
+            </a>
+
+
+            <a
+              href="/construction"
+              class="quick-card"
+              data-route="/construction"
+            >
+              <span class="quick-card__icon">▰</span>
+              <span class="quick-card__title">Construction</span>
+              <span class="quick-card__description">
+                Construction intelligence and services.
+              </span>
+            </a>
+
+          </div>
+
+        </section>
+
+
+        <!-- ====================================================
+             ACTIVITY / INTELLIGENCE
+             ==================================================== -->
+
+        <section
+          class="dashboard-columns"
+          data-section="activity"
+        >
+
+          <article class="panel panel--activity">
+
+            <div class="panel__header">
+
+              <div>
+                <span class="eyebrow">
+                  ACTIVITY
+                </span>
+
+                <h2>
+                  Recent activity
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                class="icon-button"
+                aria-label="Refresh activity"
+                data-action="refresh-activity"
+              >
+                ↻
+              </button>
+
+            </div>
+
+
+            <div
+              id="activity-feed"
+              class="activity-feed"
+              data-activity-feed
+            >
+
+              <div
+                class="empty-state"
+                data-activity-empty
+              >
+
+                <div class="empty-state__icon">
+                  ◌
+                </div>
+
+                <strong>
+                  Your activity will appear here
+                </strong>
+
+                <p>
+                  NEXUS will keep you informed about relevant
+                  activity, messages, updates and events.
+                </p>
+
+              </div>
+
+            </div>
+
+          </article>
+
+
+          <article class="panel panel--intelligence">
+
+            <div class="panel__header">
+
+              <div>
+                <span class="eyebrow">
+                  NEXUS INTELLIGENCE
+                </span>
+
+                <h2>
+                  Insights
+                </h2>
+              </div>
+
+              <span class="panel__status">
+                Live
+              </span>
+
+            </div>
+
+
+            <div class="intelligence-card">
+
+              <div class="intelligence-card__visual">
+                <span>✦</span>
+              </div>
+
+              <div class="intelligence-card__content">
+
+                <strong>
+                  Your intelligent workspace
+                </strong>
+
+                <p>
+                  Relevant recommendations, opportunities,
+                  project intelligence and platform insights
+                  will appear here as your workspace develops.
+                </p>
+
+              </div>
+
+            </div>
+
+          </article>
+
+        </section>
+
+
+        <!-- ====================================================
+             FEATURED / ADVERTISEMENT AREA
+             ==================================================== -->
+
+        <section
+          class="content-section"
+          data-section="discover"
+        >
+
+          <div class="section-heading">
+
+            <div>
+              <span class="eyebrow">
+                DISCOVER
+              </span>
+
+              <h2>
+                Featured opportunities
+              </h2>
+            </div>
+
+            <a
+              href="/marketplace"
+              class="text-link"
+              data-route="/marketplace"
+            >
+              Explore marketplace
+              <span aria-hidden="true">→</span>
+            </a>
+
+          </div>
+
+
+          <div
+            id="featured-grid"
+            class="featured-grid"
+            data-featured-grid
+          >
+
+            <article class="featured-card featured-card--placeholder">
+
+              <div class="featured-card__visual">
+                <span>◈</span>
+              </div>
+
+              <div class="featured-card__body">
+
+                <span class="featured-card__category">
+                  NEXUS
+                </span>
+
+                <h3>
+                  Featured opportunities
+                </h3>
+
+                <p>
+                  Verified opportunities and promoted content
+                  will appear here through the NEXUS discovery
+                  system.
+                </p>
+
+                <div class="featured-card__footer">
+
+                  <span>
+                    Verified platform content
+                  </span>
+
+                  <span aria-hidden="true">
+                    →
+                  </span>
+
+                </div>
+
+              </div>
+
+            </article>
+
+
+            <article class="featured-card featured-card--placeholder">
+
+              <div class="featured-card__visual">
+                <span>◇</span>
+              </div>
+
+              <div class="featured-card__body">
+
+                <span class="featured-card__category">
+                  SERVICES
+                </span>
+
+                <h3>
+                  Professional services
+                </h3>
+
+                <p>
+                  Discover trusted professionals and services
+                  when the relevant marketplace data becomes
+                  available.
+                </p>
+
+                <div class="featured-card__footer">
+
+                  <span>
+                    Professional network
+                  </span>
+
+                  <span aria-hidden="true">
+                    →
+                  </span>
+
+                </div>
+
+              </div>
+
+            </article>
+
+
+            <article class="featured-card featured-card--placeholder">
+
+              <div class="featured-card__visual">
+                <span>▦</span>
+              </div>
+
+              <div class="featured-card__body">
+
+                <span class="featured-card__category">
+                  PROJECTS
+                </span>
+
+                <h3>
+                  Project opportunities
+                </h3>
+
+                <p>
+                  Projects, construction opportunities and
+                  related activity will be delivered through
+                  the real platform services.
+                </p>
+
+                <div class="featured-card__footer">
+
+                  <span>
+                    NEXUS Projects
+                  </span>
+
+                  <span aria-hidden="true">
+                    →
+                  </span>
+
+                </div>
+
+              </div>
+
+            </article>
+
+          </div>
+
+        </section>
+
+
+        <!-- ====================================================
+             SYSTEM INFORMATION
+             ==================================================== -->
+
+        <section
+          class="system-panel"
+          data-section="system"
+        >
+
+          <div class="system-panel__identity">
+
+            <span class="brand-mark brand-mark--small">
+              N
+            </span>
+
+            <div>
+              <strong>
+                NEXUS OS
+              </strong>
+
+              <span>
+                Nexus Buildsolutions Limited
+              </span>
+            </div>
+
+          </div>
+
+
+          <div class="system-panel__metadata">
+
+            <div>
+              <span>Platform</span>
+              <strong>NEXUS OS</strong>
+            </div>
+
+            <div>
+              <span>Architecture</span>
+              <strong>1.0.0</strong>
+            </div>
+
+            <div>
+              <span>Environment</span>
+              <strong data-environment>
+                Production
+              </strong>
+            </div>
+
+            <div>
+              <span>Realtime</span>
+              <strong data-system-realtime>
+                Socket.IO
+              </strong>
+            </div>
+
+          </div>
+
+        </section>
+
+      </main>
+
+
+      <!-- ======================================================
+           APPLICATION FOOTER
+           ====================================================== -->
+
+      <footer class="app-footer">
+
+        <span>
+          ©
+          <span data-current-year></span>
+          Nexus Buildsolutions Limited
+        </span>
+
+        <div class="app-footer__links">
+
+          <a
+            href="/privacy"
+            data-route="/privacy"
+          >
+            Privacy
+          </a>
+
+          <a
+            href="/terms"
+            data-route="/terms"
+          >
+            Terms
+          </a>
+
+          <a
+            href="/status"
+            data-route="/status"
+          >
+            System status
+          </a>
+
+        </div>
+
+      </footer>
+
     </div>
 
-</div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="/js/app.js" defer></script>
+    <!-- ========================================================
+         NOTIFICATION PANEL
+         ======================================================== -->
+
+    <aside
+      id="notification-panel"
+      class="side-panel"
+      aria-label="Notifications"
+      aria-hidden="true"
+      data-component="notification-panel"
+    >
+
+      <div class="side-panel__header">
+
+        <div>
+          <span class="eyebrow">
+            NEXUS
+          </span>
+
+          <h2>
+            Notifications
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          class="icon-button"
+          aria-label="Close notifications"
+          data-action="close-notifications"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <div
+        id="notification-list"
+        class="side-panel__body"
+        data-notification-list
+      >
+
+        <div class="empty-state">
+
+          <div class="empty-state__icon">
+            ♢
+          </div>
+
+          <strong>
+            You're all caught up
+          </strong>
+
+          <p>
+            New notifications will appear here in real time.
+          </p>
+
+        </div>
+
+      </div>
+
+    </aside>
+
+
+    <!-- ========================================================
+         USER MENU
+         ======================================================== -->
+
+    <div
+      id="user-menu"
+      class="dropdown-menu"
+      role="menu"
+      hidden
+      data-component="user-menu"
+    >
+
+      <div class="dropdown-menu__identity">
+
+        <span
+          class="avatar"
+          data-user-avatar
+        >
+          N
+        </span>
+
+        <div>
+          <strong data-user-name>
+            NEXUS User
+          </strong>
+
+          <small data-user-email>
+            Account
+          </small>
+        </div>
+
+      </div>
+
+
+      <div class="dropdown-menu__divider"></div>
+
+
+      <a
+        href="/profile"
+        class="dropdown-menu__item"
+        role="menuitem"
+        data-route="/profile"
+      >
+        <span>◎</span>
+        Profile
+      </a>
+
+
+      <a
+        href="/settings"
+        class="dropdown-menu__item"
+        role="menuitem"
+        data-route="/settings"
+      >
+        <span>⚙</span>
+        Settings
+      </a>
+
+
+      <a
+        href="/security"
+        class="dropdown-menu__item"
+        role="menuitem"
+        data-route="/security"
+      >
+        <span>◇</span>
+        Security
+      </a>
+
+
+      <div class="dropdown-menu__divider"></div>
+
+
+      <button
+        type="button"
+        class="dropdown-menu__item dropdown-menu__item--danger"
+        role="menuitem"
+        data-action="logout"
+      >
+        <span>↪</span>
+        Sign out
+      </button>
+
+    </div>
+
+
+    <!-- ========================================================
+         QUICK CREATE MODAL
+         ======================================================== -->
+
+    <div
+      id="quick-create-modal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quick-create-title"
+      hidden
+      data-component="quick-create"
+    >
+
+      <div
+        class="modal__backdrop"
+        data-action="close-quick-create"
+      ></div>
+
+      <div class="modal__dialog">
+
+        <div class="modal__header">
+
+          <div>
+            <span class="eyebrow">
+              NEXUS WORKSPACE
+            </span>
+
+            <h2 id="quick-create-title">
+              Create something
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            class="icon-button"
+            aria-label="Close"
+            data-action="close-quick-create"
+          >
+            ×
+          </button>
+
+        </div>
+
+
+        <div class="create-grid">
+
+          <button
+            type="button"
+            class="create-option"
+            data-create-type="project"
+          >
+            <span>▦</span>
+            <strong>Project</strong>
+            <small>
+              Start a new project.
+            </small>
+          </button>
+
+
+          <button
+            type="button"
+            class="create-option"
+            data-create-type="service"
+          >
+            <span>◇</span>
+            <strong>Service</strong>
+            <small>
+              Publish a professional service.
+            </small>
+          </button>
+
+
+          <button
+            type="button"
+            class="create-option"
+            data-create-type="advertisement"
+          >
+            <span>◈</span>
+            <strong>Advertisement</strong>
+            <small>
+              Create a promotional listing.
+            </small>
+          </button>
+
+
+          <button
+            type="button"
+            class="create-option"
+            data-create-type="job"
+          >
+            <span>◫</span>
+            <strong>Job</strong>
+            <small>
+              Publish a job opportunity.
+            </small>
+          </button>
+
+
+          <button
+            type="button"
+            class="create-option"
+            data-create-type="property"
+          >
+            <span>⌂</span>
+            <strong>Property</strong>
+            <small>
+              Add a property listing.
+            </small>
+          </button>
+
+
+          <button
+            type="button"
+            class="create-option"
+            data-create-type="message"
+          >
+            <span>◎</span>
+            <strong>Conversation</strong>
+            <small>
+              Start a new conversation.
+            </small>
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================================
+         GLOBAL COMMAND / SEARCH PANEL
+         ======================================================== -->
+
+    <div
+      id="command-panel"
+      class="command-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="command-panel-title"
+      hidden
+      data-component="command-panel"
+    >
+
+      <div
+        class="command-panel__backdrop"
+        data-action="close-command-panel"
+      ></div>
+
+      <div class="command-panel__dialog">
+
+        <div class="command-panel__search">
+
+          <span aria-hidden="true">
+            ⌕
+          </span>
+
+          <label
+            for="command-input"
+            class="sr-only"
+          >
+            Search NEXUS
+          </label>
+
+          <input
+            id="command-input"
+            type="search"
+            placeholder="Search NEXUS…"
+            autocomplete="off"
+            data-command-input
+          />
+
+          <kbd>
+            ESC
+          </kbd>
+
+        </div>
+
+
+        <div class="command-panel__results">
+
+          <div
+            id="command-results"
+            data-command-results
+          ></div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================================
+         TOAST / SYSTEM MESSAGE CONTAINER
+         ======================================================== -->
+
+    <div
+      id="toast-container"
+      class="toast-container"
+      aria-live="polite"
+      aria-atomic="false"
+      data-component="toast-container"
+    ></div>
+
+
+    <!-- ========================================================
+         GLOBAL OFFLINE INDICATOR
+         ======================================================== -->
+
+    <div
+      id="offline-banner"
+      class="offline-banner"
+      role="status"
+      hidden
+      data-component="offline-banner"
+    >
+
+      <span
+        class="status-indicator status-indicator--offline"
+        aria-hidden="true"
+      ></span>
+
+      <span>
+        You are currently offline. NEXUS will reconnect automatically.
+      </span>
+
+    </div>
+
+  </div>
+
+
+  <!-- ==========================================================
+       SOCKET.IO CLIENT
+
+       This intentionally points to the application's own server.
+       Once server/sockets.js and server/server.js are running,
+       Socket.IO will be served from the same origin.
+
+       No third-party fake websocket service is used.
+       ========================================================== -->
+
+  <script
+    src="/socket.io/socket.io.js"
+    defer
+  ></script>
+
+
+  <!-- ==========================================================
+       NEXUS APPLICATION CLIENT
+       ========================================================== -->
+
+  <script
+    src="/js/app.js"
+    type="module"
+    defer
+  ></script>
 
 </body>
 </html>
