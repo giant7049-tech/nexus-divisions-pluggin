@@ -1,1889 +1,1906 @@
-/* ========================================================================
-   NEXUS CONNECT 2030
-   Nexus Buildsolutions Limited
+/**
+ * NEXUS OS
+ * server/models.js
+ *
+ * Production data models and persistence layer.
+ *
+ * Responsibilities:
+ * - Define persistent MongoDB/Mongoose models
+ * - Enforce schema-level data integrity
+ * - Define indexes for high-value query paths
+ * - Support authentication and identity
+ * - Support organizations and professional profiles
+ * - Support advertisements and marketplace discovery
+ * - Support plans, payments and transaction ledger
+ * - Support conversations, messages and read receipts
+ * - Support notifications
+ * - Support analytics events
+ * - Support immutable audit records
+ *
+ * Architecture:
+ *
+ * services.js
+ *      ↓
+ * models.js
+ *      ↓
+ * MongoDB
+ *
+ * No business workflows should be hidden inside this file.
+ * Business rules belong in server/services.js.
+ */
 
-   MODEL LAYER
-   ------------------------------------------------------------------------
-   Responsibilities:
-   - Application data models
-   - Professional identity
-   - Business identity
-   - Service models
-   - Project models
-   - Search result models
-   - Request models
-   - Notification models
-   - Verification models
-   - Data normalization
-   - Model factories
-   - Model serialization
-   ======================================================================== */
+import mongoose from "mongoose";
 
-"use strict";
+const { Schema, model, models } = mongoose;
 
+/* -------------------------------------------------------------------------- */
+/* CONSTANTS                                                                  */
+/* -------------------------------------------------------------------------- */
 
-/* ========================================================================
-   01. MODEL NAMESPACE
-   ======================================================================== */
+export const USER_ROLES = Object.freeze([
+  "user",
+  "professional",
+  "business",
+  "moderator",
+  "admin",
+  "super_admin",
+]);
 
-const NexusModel = {};
+export const USER_STATUS = Object.freeze([
+  "pending",
+  "active",
+  "suspended",
+  "disabled",
+  "deleted",
+]);
 
+export const ORGANIZATION_TYPES = Object.freeze([
+  "company",
+  "business",
+  "contractor",
+  "developer",
+  "agency",
+  "ngo",
+  "government",
+  "other",
+]);
 
-/* ========================================================================
-   02. MODEL ENUMERATIONS
-   ======================================================================== */
+export const ADVERTISEMENT_STATUS = Object.freeze([
+  "draft",
+  "pending_review",
+  "active",
+  "paused",
+  "expired",
+  "rejected",
+  "archived",
+]);
 
-NexusModel.Enums = {
+export const PAYMENT_STATUS = Object.freeze([
+  "pending",
+  "processing",
+  "successful",
+  "failed",
+  "cancelled",
+  "refunded",
+  "partially_refunded",
+]);
 
-    UserRole: Object.freeze({
+export const MESSAGE_TYPES = Object.freeze([
+  "text",
+  "image",
+  "file",
+  "system",
+]);
 
-        VISITOR:
-            "visitor",
+export const NOTIFICATION_TYPES = Object.freeze([
+  "system",
+  "message",
+  "connection",
+  "advertisement",
+  "payment",
+  "project",
+  "job",
+  "security",
+]);
 
-        PROFESSIONAL:
-            "professional",
+/* -------------------------------------------------------------------------- */
+/* SHARED SCHEMAS                                                             */
+/* -------------------------------------------------------------------------- */
 
-        BUSINESS:
-            "business",
-
-        ADMINISTRATOR:
-            "administrator"
-
-    }),
-
-
-    VerificationStatus: Object.freeze({
-
-        UNVERIFIED:
-            "unverified",
-
-        PENDING:
-            "pending",
-
-        VERIFIED:
-            "verified",
-
-        CERTIFIED:
-            "certified",
-
-        SUSPENDED:
-            "suspended"
-
-    }),
-
-
-    RequestStatus: Object.freeze({
-
-        DRAFT:
-            "draft",
-
-        PENDING:
-            "pending",
-
-        MATCHING:
-            "matching",
-
-        MATCHED:
-            "matched",
-
-        ACCEPTED:
-            "accepted",
-
-        IN_PROGRESS:
-            "in-progress",
-
-        COMPLETED:
-            "completed",
-
-        CANCELLED:
-            "cancelled"
-
-    }),
-
-
-    RequestPriority: Object.freeze({
-
-        STANDARD:
-            "standard",
-
-        URGENT:
-            "urgent",
-
-        EMERGENCY:
-            "emergency"
-
-    }),
-
-
-    SearchType: Object.freeze({
-
-        ALL:
-            "all",
-
-        PROFESSIONAL:
-            "professional",
-
-        BUSINESS:
-            "business",
-
-        SERVICE:
-            "service",
-
-        PROJECT:
-            "project",
-
-        LOCATION:
-            "location"
-
-    }),
-
-
-    NotificationType: Object.freeze({
-
-        SYSTEM:
-            "system",
-
-        REQUEST:
-            "request",
-
-        VERIFICATION:
-            "verification",
-
-        MESSAGE:
-            "message",
-
-        PROJECT:
-            "project",
-
-        SECURITY:
-            "security"
-
-    })
-
+const timestamps = {
+  createdAt: true,
+  updatedAt: true,
 };
 
-
-/* ========================================================================
-   03. UTILITY FUNCTIONS
-   ======================================================================== */
-
-NexusModel.Utils = {
-
-    id(prefix = "nexus") {
-
-        const timestamp =
-            Date.now().toString(36);
-
-        const random =
-            Math.random()
-                .toString(36)
-                .substring(2, 9);
-
-        return `${prefix}-${timestamp}-${random}`;
+const AddressSchema = new Schema(
+  {
+    country: {
+      type: String,
+      trim: true,
+      maxlength: 100,
     },
 
-
-    now() {
-
-        return new Date().toISOString();
-
+    state: {
+      type: String,
+      trim: true,
+      maxlength: 100,
     },
 
-
-    string(value, fallback = "") {
-
-        if (
-            value === null ||
-            value === undefined
-        ) {
-
-            return fallback;
-        }
-
-        return String(value).trim();
-
+    city: {
+      type: String,
+      trim: true,
+      maxlength: 100,
     },
 
-
-    number(value, fallback = 0) {
-
-        const number =
-            Number(value);
-
-        return Number.isFinite(number)
-            ? number
-            : fallback;
-
+    addressLine1: {
+      type: String,
+      trim: true,
+      maxlength: 300,
     },
 
-
-    array(value) {
-
-        return Array.isArray(value)
-            ? value
-            : [];
-
+    addressLine2: {
+      type: String,
+      trim: true,
+      maxlength: 300,
     },
 
-
-    object(value) {
-
-        return (
-            value &&
-            typeof value === "object" &&
-            !Array.isArray(value)
-        )
-            ? value
-            : {};
-
+    postalCode: {
+      type: String,
+      trim: true,
+      maxlength: 30,
     },
 
-
-    boolean(value, fallback = false) {
-
-        if (
-            value === true ||
-            value === false
-        ) {
-
-            return value;
-        }
-
-        return fallback;
-
+    latitude: {
+      type: Number,
+      min: -90,
+      max: 90,
     },
 
-
-    normalizeText(value) {
-
-        return this.string(value)
-            .toLowerCase()
-            .replace(/\s+/g, " ")
-            .trim();
-
+    longitude: {
+      type: Number,
+      min: -180,
+      max: 180,
     },
-
-
-    initials(name) {
-
-        return this.string(name)
-            .split(/\s+/)
-            .filter(Boolean)
-            .slice(0, 2)
-            .map(
-                part =>
-                    part
-                        .charAt(0)
-                        .toUpperCase()
-            )
-            .join("");
-
-    },
-
-
-    clone(value) {
-
-        if (
-            value === null ||
-            value === undefined
-        ) {
-
-            return value;
-        }
-
-        return JSON.parse(
-            JSON.stringify(value)
-        );
-
-    }
-
-};
-
-
-/* ========================================================================
-   04. BASE MODEL
-   ======================================================================== */
-
-class NexusBaseModel {
-
-    constructor(data = {}) {
-
-        this.id =
-            NexusModel.Utils.string(
-                data.id,
-                NexusModel.Utils.id("record")
-            );
-
-        this.createdAt =
-            NexusModel.Utils.string(
-                data.createdAt,
-                NexusModel.Utils.now()
-            );
-
-        this.updatedAt =
-            NexusModel.Utils.string(
-                data.updatedAt,
-                NexusModel.Utils.now()
-            );
-
-    }
-
-
-    touch() {
-
-        this.updatedAt =
-            NexusModel.Utils.now();
-
-        return this;
-
-    }
-
-
-    toJSON() {
-
-        return {
-            ...this
-        };
-
-    }
-
-
-    clone() {
-
-        return NexusModel.Utils.clone(
-            this.toJSON()
-        );
-
-    }
-
-}
-
-
-/* ========================================================================
-   05. LOCATION MODEL
-   ======================================================================== */
-
-class NexusLocation extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.country =
-            NexusModel.Utils.string(
-                data.country,
-                "Nigeria"
-            );
-
-        this.state =
-            NexusModel.Utils.string(
-                data.state
-            );
-
-        this.city =
-            NexusModel.Utils.string(
-                data.city
-            );
-
-        this.area =
-            NexusModel.Utils.string(
-                data.area
-            );
-
-        this.address =
-            NexusModel.Utils.string(
-                data.address
-            );
-
-        this.latitude =
-            data.latitude !== undefined
-                ? NexusModel.Utils.number(
-                    data.latitude,
-                    null
-                )
-                : null;
-
-        this.longitude =
-            data.longitude !== undefined
-                ? NexusModel.Utils.number(
-                    data.longitude,
-                    null
-                )
-                : null;
-
-    }
-
-
-    get displayName() {
-
-        return [
-            this.city,
-            this.state,
-            this.country
-        ]
-            .filter(Boolean)
-            .join(", ");
-
-    }
-
-}
-
-
-/* ========================================================================
-   06. VERIFICATION MODEL
-   ======================================================================== */
-
-class NexusVerification {
-
-    constructor(data = {}) {
-
-        this.status =
-            NexusModel.Utils.string(
-                data.status,
-                NexusModel.Enums.VerificationStatus.UNVERIFIED
-            );
-
-        this.verified =
-            this.status ===
-            NexusModel.Enums.VerificationStatus.VERIFIED ||
-            this.status ===
-            NexusModel.Enums.VerificationStatus.CERTIFIED;
-
-        this.level =
-            NexusModel.Utils.string(
-                data.level,
-                this.verified
-                    ? "standard"
-                    : "none"
-            );
-
-        this.verifiedAt =
-            NexusModel.Utils.string(
-                data.verifiedAt
-            );
-
-        this.verifiedBy =
-            NexusModel.Utils.string(
-                data.verifiedBy
-            );
-
-        this.documents =
-            NexusModel.Utils.array(
-                data.documents
-            );
-
-        this.notes =
-            NexusModel.Utils.string(
-                data.notes
-            );
-
-    }
-
-}
-
-
-/* ========================================================================
-   07. PROFESSIONAL MODEL
-   ======================================================================== */
-
-class NexusProfessional extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            "professional";
-
-        this.name =
-            NexusModel.Utils.string(
-                data.name,
-                "Nexus Professional"
-            );
-
-        this.firstName =
-            NexusModel.Utils.string(
-                data.firstName
-            );
-
-        this.lastName =
-            NexusModel.Utils.string(
-                data.lastName
-            );
-
-        this.title =
-            NexusModel.Utils.string(
-                data.title,
-                "Professional"
-            );
-
-        this.role =
-            NexusModel.Utils.string(
-                data.role,
-                "Professional Services"
-            );
-
-        this.category =
-            NexusModel.Utils.string(
-                data.category,
-                "General Professional Services"
-            );
-
-        this.company =
-            NexusModel.Utils.string(
-                data.company
-            );
-
-        this.bio =
-            NexusModel.Utils.string(
-                data.bio
-            );
-
-        this.email =
-            NexusModel.Utils.string(
-                data.email
-            );
-
-        this.phone =
-            NexusModel.Utils.string(
-                data.phone
-            );
-
-        this.avatar =
-            NexusModel.Utils.string(
-                data.avatar
-            );
-
-        this.location =
-            new NexusLocation(
-                data.location || {}
-            );
-
-        this.verification =
-            new NexusVerification(
-                data.verification || {}
-            );
-
-        this.services =
-            NexusModel.Utils.array(
-                data.services
-            );
-
-        this.skills =
-            NexusModel.Utils.array(
-                data.skills
-            );
-
-        this.certifications =
-            NexusModel.Utils.array(
-                data.certifications
-            );
-
-        this.projects =
-            NexusModel.Utils.array(
-                data.projects
-            );
-
-        this.yearsExperience =
-            NexusModel.Utils.number(
-                data.yearsExperience
-            );
-
-        this.rating =
-            NexusModel.Utils.number(
-                data.rating
-            );
-
-        this.reviewCount =
-            NexusModel.Utils.number(
-                data.reviewCount
-            );
-
-        this.available =
-            NexusModel.Utils.boolean(
-                data.available,
-                true
-            );
-
-        this.featured =
-            NexusModel.Utils.boolean(
-                data.featured
-            );
-
-    }
-
-
-    get initials() {
-
-        return NexusModel.Utils.initials(
-            this.name
-        );
-
-    }
-
-
-    get verified() {
-
-        return this.verification.verified;
-
-    }
-
-
-    get badge() {
-
-        if (
-            this.verification.status ===
-            NexusModel.Enums.VerificationStatus.CERTIFIED
-        ) {
-
-            return "Nexus Certified";
-
-        }
-
-        if (this.verification.verified) {
-
-            return "Nexus Verified";
-
-        }
-
-        return "Unverified";
-
-    }
-
-}
-
-
-/* ========================================================================
-   08. BUSINESS MODEL
-   ======================================================================== */
-
-class NexusBusiness extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            "business";
-
-        this.name =
-            NexusModel.Utils.string(
-                data.name,
-                "Nexus Business"
-            );
-
-        this.legalName =
-            NexusModel.Utils.string(
-                data.legalName
-            );
-
-        this.industry =
-            NexusModel.Utils.string(
-                data.industry,
-                "Professional Services"
-            );
-
-        this.description =
-            NexusModel.Utils.string(
-                data.description
-            );
-
-        this.logo =
-            NexusModel.Utils.string(
-                data.logo
-            );
-
-        this.website =
-            NexusModel.Utils.string(
-                data.website
-            );
-
-        this.email =
-            NexusModel.Utils.string(
-                data.email
-            );
-
-        this.phone =
-            NexusModel.Utils.string(
-                data.phone
-            );
-
-        this.location =
-            new NexusLocation(
-                data.location || {}
-            );
-
-        this.verification =
-            new NexusVerification(
-                data.verification || {}
-            );
-
-        this.services =
-            NexusModel.Utils.array(
-                data.services
-            );
-
-        this.projects =
-            NexusModel.Utils.array(
-                data.projects
-            );
-
-        this.employeeCount =
-            NexusModel.Utils.number(
-                data.employeeCount
-            );
-
-        this.rating =
-            NexusModel.Utils.number(
-                data.rating
-            );
-
-        this.reviewCount =
-            NexusModel.Utils.number(
-                data.reviewCount
-            );
-
-        this.featured =
-            NexusModel.Utils.boolean(
-                data.featured
-            );
-
-    }
-
-
-    get verified() {
-
-        return this.verification.verified;
-
-    }
-
-
-    get badge() {
-
-        if (
-            this.verification.status ===
-            NexusModel.Enums.VerificationStatus.CERTIFIED
-        ) {
-
-            return "Nexus Certified Business";
-
-        }
-
-        if (this.verification.verified) {
-
-            return "Nexus Business";
-
-        }
-
-        return "Business";
-
-    }
-
-}
-
-
-/* ========================================================================
-   09. SERVICE MODEL
-   ======================================================================== */
-
-class NexusService extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            "service";
-
-        this.name =
-            NexusModel.Utils.string(
-                data.name,
-                "Professional Service"
-            );
-
-        this.category =
-            NexusModel.Utils.string(
-                data.category,
-                "General Services"
-            );
-
-        this.description =
-            NexusModel.Utils.string(
-                data.description
-            );
-
-        this.icon =
-            NexusModel.Utils.string(
-                data.icon,
-                "◆"
-            );
-
-        this.location =
-            new NexusLocation(
-                data.location || {}
-            );
-
-        this.providers =
-            NexusModel.Utils.array(
-                data.providers
-            );
-
-        this.available =
-            NexusModel.Utils.boolean(
-                data.available,
-                true
-            );
-
-        this.featured =
-            NexusModel.Utils.boolean(
-                data.featured
-            );
-
-    }
-
-}
-
-
-/* ========================================================================
-   10. PROJECT MODEL
-   ======================================================================== */
-
-class NexusProject extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            "project";
-
-        this.name =
-            NexusModel.Utils.string(
-                data.name,
-                "Nexus Project"
-            );
-
-        this.description =
-            NexusModel.Utils.string(
-                data.description
-            );
-
-        this.category =
-            NexusModel.Utils.string(
-                data.category,
-                "Construction"
-            );
-
-        this.client =
-            NexusModel.Utils.string(
-                data.client
-            );
-
-        this.contractor =
-            NexusModel.Utils.string(
-                data.contractor
-            );
-
-        this.location =
-            new NexusLocation(
-                data.location || {}
-            );
-
-        this.status =
-            NexusModel.Utils.string(
-                data.status,
-                "active"
-            );
-
-        this.startDate =
-            NexusModel.Utils.string(
-                data.startDate
-            );
-
-        this.endDate =
-            NexusModel.Utils.string(
-                data.endDate
-            );
-
-        this.progress =
-            Math.min(
-                100,
-                Math.max(
-                    0,
-                    NexusModel.Utils.number(
-                        data.progress
-                    )
-                )
-            );
-
-        this.coverImage =
-            NexusModel.Utils.string(
-                data.coverImage
-            );
-
-        this.gallery =
-            NexusModel.Utils.array(
-                data.gallery
-            );
-
-        this.team =
-            NexusModel.Utils.array(
-                data.team
-            );
-
-    }
-
-}
-
-
-/* ========================================================================
-   11. SEARCH RESULT MODEL
-   ======================================================================== */
-
-class NexusSearchResult extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            NexusModel.Utils.string(
-                data.type,
-                NexusModel.Enums.SearchType.ALL
-            );
-
-        this.name =
-            NexusModel.Utils.string(
-                data.name,
-                "Nexus Network Member"
-            );
-
-        this.role =
-            NexusModel.Utils.string(
-                data.role,
-                "Verified Professional"
-            );
-
-        this.category =
-            NexusModel.Utils.string(
-                data.category
-            );
-
-        this.description =
-            NexusModel.Utils.string(
-                data.description
-            );
-
-        this.location =
-            NexusModel.Utils.string(
-                data.location,
-                "Nigeria"
-            );
-
-        this.badge =
-            NexusModel.Utils.string(
-                data.badge,
-                "Nexus Verified"
-            );
-
-        this.avatar =
-            NexusModel.Utils.string(
-                data.avatar
-            );
-
-        this.score =
-            NexusModel.Utils.number(
-                data.score
-            );
-
-        this.metadata =
-            NexusModel.Utils.object(
-                data.metadata
-            );
-
-    }
-
-
-    get initials() {
-
-        return NexusModel.Utils.initials(
-            this.name
-        );
-
-    }
-
-}
-
-
-/* ========================================================================
-   12. REQUEST MODEL
-   ======================================================================== */
-
-class NexusRequest extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            "request";
-
-        this.service =
-            NexusModel.Utils.string(
-                data.service,
-                "Professional Service"
-            );
-
-        this.description =
-            NexusModel.Utils.string(
-                data.description
-            );
-
-        this.status =
-            NexusModel.Utils.string(
-                data.status,
-                NexusModel.Enums.RequestStatus.PENDING
-            );
-
-        this.priority =
-            NexusModel.Utils.string(
-                data.priority,
-                NexusModel.Enums.RequestPriority.STANDARD
-            );
-
-        this.requesterId =
-            NexusModel.Utils.string(
-                data.requesterId
-            );
-
-        this.providerId =
-            NexusModel.Utils.string(
-                data.providerId
-            );
-
-        this.location =
-            new NexusLocation(
-                data.location || {}
-            );
-
-        this.preferredDate =
-            NexusModel.Utils.string(
-                data.preferredDate
-            );
-
-        this.budget =
-            NexusModel.Utils.number(
-                data.budget
-            );
-
-        this.notes =
-            NexusModel.Utils.string(
-                data.notes
-            );
-
-    }
-
-
-    get active() {
-
-        return ![
-            NexusModel.Enums.RequestStatus.COMPLETED,
-            NexusModel.Enums.RequestStatus.CANCELLED
-        ].includes(
-            this.status
-        );
-
-    }
-
-}
-
-
-/* ========================================================================
-   13. NOTIFICATION MODEL
-   ======================================================================== */
-
-class NexusNotification extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            NexusModel.Utils.string(
-                data.type,
-                NexusModel.Enums.NotificationType.SYSTEM
-            );
-
-        this.title =
-            NexusModel.Utils.string(
-                data.title,
-                "Nexus Connect"
-            );
-
-        this.message =
-            NexusModel.Utils.string(
-                data.message
-            );
-
-        this.read =
-            NexusModel.Utils.boolean(
-                data.read
-            );
-
-        this.priority =
-            NexusModel.Utils.string(
-                data.priority,
-                NexusModel.Enums.RequestPriority.STANDARD
-            );
-
-        this.action =
-            NexusModel.Utils.string(
-                data.action
-            );
-
-        this.timestamp =
-            NexusModel.Utils.string(
-                data.timestamp,
-                NexusModel.Utils.now()
-            );
-
-    }
-
-}
-
-
-/* ========================================================================
-   14. USER MODEL
-   ======================================================================== */
-
-class NexusUser extends NexusBaseModel {
-
-    constructor(data = {}) {
-
-        super(data);
-
-        this.type =
-            "user";
-
-        this.name =
-            NexusModel.Utils.string(
-                data.name,
-                "Nexus User"
-            );
-
-        this.email =
-            NexusModel.Utils.string(
-                data.email
-            );
-
-        this.phone =
-            NexusModel.Utils.string(
-                data.phone
-            );
-
-        this.role =
-            NexusModel.Utils.string(
-                data.role,
-                NexusModel.Enums.UserRole.VISITOR
-            );
-
-        this.avatar =
-            NexusModel.Utils.string(
-                data.avatar
-            );
-
-        this.location =
-            new NexusLocation(
-                data.location || {}
-            );
-
-        this.verification =
-            new NexusVerification(
-                data.verification || {}
-            );
-
-        this.permissions =
-            NexusModel.Utils.array(
-                data.permissions
-            );
-
-        this.preferences =
-            NexusModel.Utils.object(
-                data.preferences
-            );
-
-        this.active =
-            NexusModel.Utils.boolean(
-                data.active,
-                true
-            );
-
-    }
-
-
-    get initials() {
-
-        return NexusModel.Utils.initials(
-            this.name
-        );
-
-    }
-
-
-    get verified() {
-
-        return this.verification.verified;
-
-    }
-
-}
-
-
-/* ========================================================================
-   15. MODEL FACTORY
-   ======================================================================== */
-
-NexusModel.create = function (
-    type,
-    data = {}
-) {
-
-    switch (
-        NexusModel.Utils.normalizeText(type)
-    ) {
-
-        case "professional":
-
-            return new NexusProfessional(
-                data
-            );
-
-
-        case "business":
-
-            return new NexusBusiness(
-                data
-            );
-
-
-        case "service":
-
-            return new NexusService(
-                data
-            );
-
-
-        case "project":
-
-            return new NexusProject(
-                data
-            );
-
-
-        case "request":
-
-            return new NexusRequest(
-                data
-            );
-
-
-        case "notification":
-
-            return new NexusNotification(
-                data
-            );
-
-
-        case "user":
-
-            return new NexusUser(
-                data
-            );
-
-
-        case "search":
-
-        case "searchresult":
-
-            return new NexusSearchResult(
-                data
-            );
-
-
-        case "location":
-
-            return new NexusLocation(
-                data
-            );
-
-
-        default:
-
-            return new NexusBaseModel(
-                data
-            );
-
-    }
-
-};
-
-
-/* ========================================================================
-   16. COLLECTION FACTORY
-   ======================================================================== */
-
-NexusModel.collection = function (
-    type,
-    items = []
-) {
-
-    return NexusModel.Utils
-        .array(items)
-        .map(
-            item =>
-                NexusModel.create(
-                    type,
-                    item
-                )
-        );
-
-};
-
-
-/* ========================================================================
-   17. SEARCH RESULT NORMALIZATION
-   ======================================================================== */
-
-NexusModel.normalizeSearchResults =
-    function (results = []) {
-
-        return NexusModel.Utils
-            .array(results)
-            .map(
-                result =>
-                    result instanceof NexusSearchResult
-                        ? result
-                        : new NexusSearchResult(
-                            result
-                        )
-            );
-
-    };
-
-
-/* ========================================================================
-   18. PROFESSIONAL NORMALIZATION
-   ======================================================================== */
-
-NexusModel.normalizeProfessional =
-    function (data = {}) {
-
-        return data instanceof NexusProfessional
-            ? data
-            : new NexusProfessional(
-                data
-            );
-
-    };
-
-
-/* ========================================================================
-   19. BUSINESS NORMALIZATION
-   ======================================================================== */
-
-NexusModel.normalizeBusiness =
-    function (data = {}) {
-
-        return data instanceof NexusBusiness
-            ? data
-            : new NexusBusiness(
-                data
-            );
-
-    };
-
-
-/* ========================================================================
-   20. REQUEST NORMALIZATION
-   ======================================================================== */
-
-NexusModel.normalizeRequest =
-    function (data = {}) {
-
-        return data instanceof NexusRequest
-            ? data
-            : new NexusRequest(
-                data
-            );
-
-    };
-
-
-/* ========================================================================
-   21. SERIALIZATION
-   ======================================================================== */
-
-NexusModel.serialize =
-    function (model) {
-
-        if (
-            !model ||
-            typeof model.toJSON !== "function"
-        ) {
-
-            return NexusModel.Utils.clone(
-                model
-            );
-
-        }
-
-        return model.toJSON();
-
-    };
-
-
-/* ========================================================================
-   22. VALIDATION
-   ======================================================================== */
-
-NexusModel.validate =
-    function (model) {
-
-        if (!model) {
-
-            return {
-
-                valid: false,
-
-                errors: [
-                    "Model is required."
-                ]
-
-            };
-
-        }
-
-
-        const errors = [];
-
-
-        if (!model.id) {
-
-            errors.push(
-                "Model ID is required."
-            );
-
-        }
-
-
-        if (!model.createdAt) {
-
-            errors.push(
-                "Created timestamp is required."
-            );
-
-        }
-
-
-        return {
-
-            valid:
-                errors.length === 0,
-
-            errors
-
-        };
-
-    };
-
-
-/* ========================================================================
-   23. DEMONSTRATION PROFESSIONAL DATA
-   ======================================================================== */
-
-NexusModel.demoProfessionals = [
-
-    new NexusProfessional({
-
-        id:
-            "professional-001",
-
-        name:
-            "Nexus Certified Engineer",
-
-        title:
-            "Senior Building Engineer",
-
-        role:
-            "Building & Construction Engineering",
-
-        category:
-            "Building Engineering",
-
-        company:
-            "Nexus Buildsolutions Limited",
-
-        location: {
-
-            country:
-                "Nigeria",
-
-            state:
-                "Gombe",
-
-            city:
-                "Gombe"
-
-        },
-
-        verification: {
-
-            status:
-                NexusModel.Enums.VerificationStatus.CERTIFIED,
-
-            level:
-                "professional",
-
-            verifiedAt:
-                "2030-01-01T00:00:00.000Z"
-
-        },
-
-        services: [
-
-            "Building Construction",
-
-            "Project Management",
-
-            "Site Engineering",
-
-            "Construction Supervision"
-
-        ],
-
-        skills: [
-
-            "Construction",
-
-            "Site Management",
-
-            "Project Delivery",
-
-            "Building Engineering"
-
-        ],
-
-        yearsExperience:
-            10,
-
-        rating:
-            4.9,
-
-        reviewCount:
-            128,
-
-        available:
-            true,
-
-        featured:
-            true
-
-    }),
-
-
-    new NexusProfessional({
-
-        id:
-            "professional-002",
-
-        name:
-            "Nexus Electrical Specialist",
-
-        title:
-            "Electrical Systems Specialist",
-
-        role:
-            "Electrical & Technical Services",
-
-        category:
-            "Electrical Services",
-
-        location: {
-
-            country:
-                "Nigeria",
-
-            state:
-                "FCT",
-
-            city:
-                "Abuja"
-
-        },
-
-        verification: {
-
-            status:
-                NexusModel.Enums.VerificationStatus.VERIFIED,
-
-            level:
-                "professional"
-
-        },
-
-        services: [
-
-            "Electrical Installation",
-
-            "Power Systems",
-
-            "Maintenance"
-
-        ],
-
-        yearsExperience:
-            8,
-
-        rating:
-            4.8,
-
-        reviewCount:
-            94,
-
-        available:
-            true,
-
-        featured:
-            true
-
-    })
-
-];
-
-
-/* ========================================================================
-   24. DEMONSTRATION BUSINESS DATA
-   ======================================================================== */
-
-NexusModel.demoBusinesses = [
-
-    new NexusBusiness({
-
-        id:
-            "business-001",
-
-        name:
-            "Nexus Construction Partner",
-
-        industry:
-            "Construction & Property",
-
-        description:
-            "Verified construction and property services partner.",
-
-        location: {
-
-            country:
-                "Nigeria",
-
-            state:
-                "FCT",
-
-            city:
-                "Abuja"
-
-        },
-
-        verification: {
-
-            status:
-                NexusModel.Enums.VerificationStatus.VERIFIED
-
-        },
-
-        services: [
-
-            "Construction",
-
-            "Property Development",
-
-            "Project Management"
-
-        ],
-
-        rating:
-            4.7,
-
-        reviewCount:
-            76,
-
-        featured:
-            true
-
-    })
-
-];
-
-
-/* ========================================================================
-   25. DEMONSTRATION SERVICE DATA
-   ======================================================================== */
-
-NexusModel.demoServices = [
-
-    new NexusService({
-
-        id:
-            "service-001",
-
-        name:
-            "Building Engineering",
-
-        category:
-            "Construction",
-
-        description:
-            "Professional building engineering, supervision and project delivery.",
-
-        icon:
-            "BE",
-
-        featured:
-            true
-
-    }),
-
-
-    new NexusService({
-
-        id:
-            "service-002",
-
-        name:
-            "Electrical Services",
-
-        category:
-            "Technical",
-
-        description:
-            "Verified electrical professionals and technical service providers.",
-
-        icon:
-            "EL",
-
-        featured:
-            true
-
-    }),
-
-
-    new NexusService({
-
-        id:
-            "service-003",
-
-        name:
-            "Property Services",
-
-        category:
-            "Property",
-
-        description:
-            "Professional property development, management and support.",
-
-        icon:
-            "PR",
-
-        featured:
-            true
-
-    }),
-
-
-    new NexusService({
-
-        id:
-            "service-004",
-
-        name:
-            "Project Management",
-
-        category:
-            "Professional",
-
-        description:
-            "Structured project coordination and professional delivery.",
-
-        icon:
-            "PM",
-
-        featured:
-            true
-
-    })
-
-];
-
-
-/* ========================================================================
-   26. PUBLIC MODEL API
-   ======================================================================== */
-
-NexusModel.classes = {
-
-    Base:
-        NexusBaseModel,
-
-    Location:
-        NexusLocation,
-
-    Verification:
-        NexusVerification,
-
-    User:
-        NexusUser,
-
-    Professional:
-        NexusProfessional,
-
-    Business:
-        NexusBusiness,
-
-    Service:
-        NexusService,
-
-    Project:
-        NexusProject,
-
-    SearchResult:
-        NexusSearchResult,
-
-    Request:
-        NexusRequest,
-
-    Notification:
-        NexusNotification
-
-};
-
-
-/* ========================================================================
-   27. GLOBAL EXPORT
-   ======================================================================== */
-
-window.NexusModel =
-    NexusModel;
-
-
-/* ========================================================================
-   28. MODEL INITIALIZATION
-   ======================================================================== */
-
-console.info(
-    "[Nexus Connect] Model layer initialized successfully."
+  },
+  {
+    _id: false,
+  },
 );
 
+const MediaSchema = new Schema(
+  {
+    provider: {
+      type: String,
+      enum: ["cloudinary", "external", "local"],
+      required: true,
+    },
 
-/* ========================================================================
-   END — NEXUS CONNECT 2030 MODEL LAYER
-   ======================================================================== */
+    publicId: {
+      type: String,
+      trim: true,
+    },
+
+    url: {
+      type: String,
+      trim: true,
+      maxlength: 2048,
+    },
+
+    secureUrl: {
+      type: String,
+      trim: true,
+      maxlength: 2048,
+    },
+
+    resourceType: {
+      type: String,
+      enum: ["image", "video", "raw", "file"],
+      default: "image",
+    },
+
+    mimeType: {
+      type: String,
+      trim: true,
+      maxlength: 150,
+    },
+
+    width: Number,
+
+    height: Number,
+
+    sizeBytes: {
+      type: Number,
+      min: 0,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+/* -------------------------------------------------------------------------- */
+/* USER / IDENTITY                                                             */
+/* -------------------------------------------------------------------------- */
+
+const UserSchema = new Schema(
+  {
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      maxlength: 320,
+      index: true,
+    },
+
+    phone: {
+      type: String,
+      trim: true,
+      maxlength: 40,
+      sparse: true,
+      index: true,
+    },
+
+    username: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      minlength: 3,
+      maxlength: 50,
+      sparse: true,
+      index: true,
+    },
+
+    passwordHash: {
+      type: String,
+      required: true,
+      select: false,
+    },
+
+    role: {
+      type: String,
+      enum: USER_ROLES,
+      default: "user",
+      index: true,
+    },
+
+    status: {
+      type: String,
+      enum: USER_STATUS,
+      default: "pending",
+      index: true,
+    },
+
+    emailVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+
+    phoneVerifiedAt: {
+      type: Date,
+      default: null,
+    },
+
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
+
+    lastSeenAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    avatar: {
+      type: MediaSchema,
+      default: null,
+    },
+
+    profile: {
+      firstName: {
+        type: String,
+        trim: true,
+        maxlength: 100,
+      },
+
+      lastName: {
+        type: String,
+        trim: true,
+        maxlength: 100,
+      },
+
+      displayName: {
+        type: String,
+        trim: true,
+        maxlength: 160,
+      },
+
+      bio: {
+        type: String,
+        trim: true,
+        maxlength: 2000,
+      },
+
+      profession: {
+        type: String,
+        trim: true,
+        maxlength: 150,
+      },
+
+      companyName: {
+        type: String,
+        trim: true,
+        maxlength: 200,
+      },
+
+      website: {
+        type: String,
+        trim: true,
+        maxlength: 2048,
+      },
+
+      location: {
+        type: AddressSchema,
+        default: null,
+      },
+    },
+
+    organizationIds: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Organization",
+      },
+    ],
+
+    permissions: {
+      type: [String],
+      default: [],
+    },
+
+    security: {
+      failedLoginAttempts: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      lockedUntil: {
+        type: Date,
+        default: null,
+      },
+
+      passwordChangedAt: {
+        type: Date,
+        default: null,
+      },
+
+      tokenVersion: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      mfaEnabled: {
+        type: Boolean,
+        default: false,
+      },
+    },
+
+    preferences: {
+      emailNotifications: {
+        type: Boolean,
+        default: true,
+      },
+
+      pushNotifications: {
+        type: Boolean,
+        default: true,
+      },
+
+      marketingNotifications: {
+        type: Boolean,
+        default: false,
+      },
+
+      language: {
+        type: String,
+        default: "en",
+        maxlength: 10,
+      },
+
+      timezone: {
+        type: String,
+        default: "Africa/Lagos",
+        maxlength: 100,
+      },
+    },
+
+    deletedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+UserSchema.index({
+  "profile.displayName": "text",
+  "profile.profession": "text",
+  "profile.companyName": "text",
+});
+
+UserSchema.index({
+  status: 1,
+  role: 1,
+  createdAt: -1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* PROFESSIONAL PROFILE                                                        */
+/* -------------------------------------------------------------------------- */
+
+const ProfessionalProfileSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+      index: true,
+    },
+
+    headline: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+    },
+
+    professionalSummary: {
+      type: String,
+      trim: true,
+      maxlength: 5000,
+    },
+
+    specialties: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+
+    skills: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+
+    certifications: [
+      {
+        name: {
+          type: String,
+          required: true,
+          trim: true,
+          maxlength: 200,
+        },
+
+        issuer: {
+          type: String,
+          trim: true,
+          maxlength: 200,
+        },
+
+        credentialId: {
+          type: String,
+          trim: true,
+          maxlength: 200,
+        },
+
+        issuedAt: Date,
+
+        expiresAt: Date,
+
+        verified: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
+
+    yearsOfExperience: {
+      type: Number,
+      min: 0,
+      max: 100,
+    },
+
+    portfolio: {
+      type: [MediaSchema],
+      default: [],
+    },
+
+    serviceAreas: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+
+    hourlyRate: {
+      amount: {
+        type: Number,
+        min: 0,
+      },
+
+      currency: {
+        type: String,
+        uppercase: true,
+        maxlength: 10,
+      },
+    },
+
+    verification: {
+      status: {
+        type: String,
+        enum: ["unverified", "pending", "verified", "rejected"],
+        default: "unverified",
+        index: true,
+      },
+
+      verifiedAt: Date,
+
+      verifiedBy: {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    },
+
+    rating: {
+      average: {
+        type: Number,
+        min: 0,
+        max: 5,
+        default: 0,
+      },
+
+      count: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+ProfessionalProfileSchema.index({
+  specialties: 1,
+  serviceAreas: 1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* ORGANIZATIONS                                                               */
+/* -------------------------------------------------------------------------- */
+
+const OrganizationMemberSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    role: {
+      type: String,
+      enum: ["owner", "admin", "manager", "member", "viewer"],
+      default: "member",
+    },
+
+    permissions: {
+      type: [String],
+      default: [],
+    },
+
+    joinedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+const OrganizationSchema = new Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 250,
+      index: true,
+    },
+
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      maxlength: 120,
+      index: true,
+    },
+
+    type: {
+      type: String,
+      enum: ORGANIZATION_TYPES,
+      default: "company",
+      index: true,
+    },
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 5000,
+    },
+
+    logo: {
+      type: MediaSchema,
+      default: null,
+    },
+
+    website: {
+      type: String,
+      trim: true,
+      maxlength: 2048,
+    },
+
+    contactEmail: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      maxlength: 320,
+    },
+
+    contactPhone: {
+      type: String,
+      trim: true,
+      maxlength: 40,
+    },
+
+    address: {
+      type: AddressSchema,
+      default: null,
+    },
+
+    ownerId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    members: {
+      type: [OrganizationMemberSchema],
+      default: [],
+    },
+
+    verification: {
+      status: {
+        type: String,
+        enum: ["unverified", "pending", "verified", "rejected"],
+        default: "unverified",
+        index: true,
+      },
+
+      verifiedAt: Date,
+    },
+
+    status: {
+      type: String,
+      enum: ["active", "suspended", "archived"],
+      default: "active",
+      index: true,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+OrganizationSchema.index({
+  name: "text",
+  description: "text",
+});
+
+/* -------------------------------------------------------------------------- */
+/* ADVERTISEMENTS                                                              */
+/* -------------------------------------------------------------------------- */
+
+const AdvertisementSchema = new Schema(
+  {
+    ownerId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      default: null,
+      index: true,
+    },
+
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 250,
+    },
+
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      maxlength: 180,
+      index: true,
+    },
+
+    description: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 10000,
+    },
+
+    category: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100,
+      index: true,
+    },
+
+    subcategory: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+    },
+
+    media: {
+      type: [MediaSchema],
+      default: [],
+    },
+
+    location: {
+      type: AddressSchema,
+      default: null,
+    },
+
+    price: {
+      amount: {
+        type: Number,
+        min: 0,
+      },
+
+      currency: {
+        type: String,
+        uppercase: true,
+        maxlength: 10,
+      },
+
+      negotiable: {
+        type: Boolean,
+        default: false,
+      },
+    },
+
+    status: {
+      type: String,
+      enum: ADVERTISEMENT_STATUS,
+      default: "draft",
+      index: true,
+    },
+
+    visibility: {
+      type: String,
+      enum: ["public", "network", "private"],
+      default: "public",
+      index: true,
+    },
+
+    featured: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    featuredUntil: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    tags: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+
+    publishedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    expiresAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    analytics: {
+      impressions: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      views: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      uniqueViews: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      clicks: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      enquiries: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      shares: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      saves: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+
+      conversions: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+AdvertisementSchema.index({
+  title: "text",
+  description: "text",
+  category: "text",
+  tags: "text",
+});
+
+AdvertisementSchema.index({
+  status: 1,
+  visibility: 1,
+  featured: -1,
+  publishedAt: -1,
+});
+
+AdvertisementSchema.index({
+  ownerId: 1,
+  status: 1,
+  createdAt: -1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* PLANS                                                                       */
+/* -------------------------------------------------------------------------- */
+
+const PlanSchema = new Schema(
+  {
+    code: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      maxlength: 100,
+      index: true,
+    },
+
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 150,
+    },
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 3000,
+    },
+
+    currency: {
+      type: String,
+      uppercase: true,
+      required: true,
+      maxlength: 10,
+    },
+
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    interval: {
+      type: String,
+      enum: ["one_time", "monthly", "quarterly", "yearly"],
+      default: "one_time",
+    },
+
+    features: {
+      type: [String],
+      default: [],
+    },
+
+    entitlements: {
+      type: [String],
+      default: [],
+    },
+
+    active: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+/* -------------------------------------------------------------------------- */
+/* TRANSACTIONS / PAYMENTS                                                     */
+/* -------------------------------------------------------------------------- */
+
+const TransactionSchema = new Schema(
+  {
+    reference: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+
+    provider: {
+      type: String,
+      enum: ["paystack"],
+      required: true,
+      index: true,
+    },
+
+    providerReference: {
+      type: String,
+      trim: true,
+      maxlength: 300,
+      index: true,
+    },
+
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      default: null,
+      index: true,
+    },
+
+    planId: {
+      type: Schema.Types.ObjectId,
+      ref: "Plan",
+      default: null,
+    },
+
+    advertisementId: {
+      type: Schema.Types.ObjectId,
+      ref: "Advertisement",
+      default: null,
+    },
+
+    amount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    currency: {
+      type: String,
+      uppercase: true,
+      required: true,
+      maxlength: 10,
+    },
+
+    status: {
+      type: String,
+      enum: PAYMENT_STATUS,
+      default: "pending",
+      index: true,
+    },
+
+    type: {
+      type: String,
+      enum: [
+        "payment",
+        "subscription",
+        "refund",
+        "adjustment",
+        "payout",
+      ],
+      default: "payment",
+      index: true,
+    },
+
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
+
+    failureReason: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+TransactionSchema.index({
+  userId: 1,
+  createdAt: -1,
+});
+
+TransactionSchema.index({
+  provider: 1,
+  providerReference: 1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* PAYMENT WEBHOOK EVENTS                                                      */
+/* -------------------------------------------------------------------------- */
+
+const PaymentWebhookSchema = new Schema(
+  {
+    provider: {
+      type: String,
+      enum: ["paystack"],
+      required: true,
+    },
+
+    eventId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+
+    eventType: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 150,
+    },
+
+    signatureVerified: {
+      type: Boolean,
+      required: true,
+    },
+
+    payload: {
+      type: Schema.Types.Mixed,
+      required: true,
+    },
+
+    processed: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    processedAt: {
+      type: Date,
+      default: null,
+    },
+
+    processingError: {
+      type: String,
+      maxlength: 3000,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+/* -------------------------------------------------------------------------- */
+/* CONVERSATIONS                                                               */
+/* -------------------------------------------------------------------------- */
+
+const ConversationParticipantSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    joinedAt: {
+      type: Date,
+      default: Date.now,
+    },
+
+    lastReadAt: {
+      type: Date,
+      default: null,
+    },
+
+    muted: {
+      type: Boolean,
+      default: false,
+    },
+
+    archived: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+const ConversationSchema = new Schema(
+  {
+    type: {
+      type: String,
+      enum: ["direct", "group", "system"],
+      default: "direct",
+      index: true,
+    },
+
+    participants: {
+      type: [ConversationParticipantSchema],
+      required: true,
+      validate: {
+        validator(value) {
+          return Array.isArray(value) && value.length >= 2;
+        },
+        message: "A conversation requires at least two participants.",
+      },
+    },
+
+    title: {
+      type: String,
+      trim: true,
+      maxlength: 250,
+    },
+
+    avatar: {
+      type: MediaSchema,
+      default: null,
+    },
+
+    lastMessageId: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+
+    lastMessageAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["active", "archived"],
+      default: "active",
+      index: true,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+ConversationSchema.index({
+  "participants.userId": 1,
+  lastMessageAt: -1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* MESSAGES                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const MessageSchema = new Schema(
+  {
+    conversationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Conversation",
+      required: true,
+      index: true,
+    },
+
+    senderId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    type: {
+      type: String,
+      enum: MESSAGE_TYPES,
+      default: "text",
+    },
+
+    body: {
+      type: String,
+      trim: true,
+      maxlength: 20000,
+    },
+
+    media: {
+      type: [MediaSchema],
+      default: [],
+    },
+
+    replyToMessageId: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+
+    clientMessageId: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+    },
+
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
+    readBy: [
+      {
+        userId: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+        },
+
+        readAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+
+    editedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+MessageSchema.index({
+  conversationId: 1,
+  createdAt: -1,
+});
+
+MessageSchema.index(
+  {
+    conversationId: 1,
+    senderId: 1,
+    clientMessageId: 1,
+  },
+  {
+    unique: true,
+    sparse: true,
+  },
+);
+
+/* -------------------------------------------------------------------------- */
+/* NOTIFICATIONS                                                               */
+/* -------------------------------------------------------------------------- */
+
+const NotificationSchema = new Schema(
+  {
+    recipientId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    actorId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    type: {
+      type: String,
+      enum: NOTIFICATION_TYPES,
+      required: true,
+      index: true,
+    },
+
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 250,
+    },
+
+    body: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+    },
+
+    data: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+
+    readAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+
+    expiresAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+NotificationSchema.index({
+  recipientId: 1,
+  readAt: 1,
+  createdAt: -1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* ANALYTICS EVENTS                                                            */
+/* -------------------------------------------------------------------------- */
+
+const AnalyticsEventSchema = new Schema(
+  {
+    eventName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 150,
+      index: true,
+    },
+
+    eventVersion: {
+      type: String,
+      default: "1.0",
+      maxlength: 30,
+    },
+
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
+    anonymousId: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+
+    advertisementId: {
+      type: Schema.Types.ObjectId,
+      ref: "Advertisement",
+      default: null,
+      index: true,
+    },
+
+    sessionId: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+
+    requestId: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+
+    source: {
+      type: String,
+      enum: ["web", "mobile", "api", "system", "admin"],
+      default: "web",
+      index: true,
+    },
+
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+
+    occurredAt: {
+      type: Date,
+      required: true,
+      default: Date.now,
+      index: true,
+    },
+
+    organic: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+  },
+  {
+    timestamps: false,
+    versionKey: false,
+  },
+);
+
+AnalyticsEventSchema.index({
+  eventName: 1,
+  occurredAt: -1,
+});
+
+AnalyticsEventSchema.index({
+  advertisementId: 1,
+  eventName: 1,
+  occurredAt: -1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* AUDIT LOG                                                                   */
+/* -------------------------------------------------------------------------- */
+
+const AuditLogSchema = new Schema(
+  {
+    actorId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
+    action: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+
+    resourceType: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100,
+      index: true,
+    },
+
+    resourceId: {
+      type: Schema.Types.ObjectId,
+      default: null,
+      index: true,
+    },
+
+    requestId: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+
+    ipAddress: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+    },
+
+    userAgent: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+    },
+
+    reason: {
+      type: String,
+      trim: true,
+      maxlength: 3000,
+    },
+
+    before: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    after: {
+      type: Schema.Types.Mixed,
+      default: null,
+    },
+
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+
+    category: {
+      type: String,
+      enum: [
+        "authentication",
+        "authorization",
+        "security",
+        "financial",
+        "administrative",
+        "data",
+        "system",
+      ],
+      required: true,
+      index: true,
+    },
+  },
+  {
+    timestamps: {
+      createdAt: true,
+      updatedAt: false,
+    },
+    versionKey: false,
+  },
+);
+
+AuditLogSchema.index({
+  resourceType: 1,
+  resourceId: 1,
+  createdAt: -1,
+});
+
+AuditLogSchema.index({
+  actorId: 1,
+  createdAt: -1,
+});
+
+/* -------------------------------------------------------------------------- */
+/* SESSION / REFRESH TOKEN RECORDS                                             */
+/* -------------------------------------------------------------------------- */
+
+const SessionSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+
+    tokenHash: {
+      type: String,
+      required: true,
+      unique: true,
+      select: false,
+      index: true,
+    },
+
+    deviceId: {
+      type: String,
+      trim: true,
+      maxlength: 200,
+      index: true,
+    },
+
+    userAgent: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+    },
+
+    ipAddress: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+    },
+
+    expiresAt: {
+      type: Date,
+      required: true,
+      index: true,
+    },
+
+    revokedAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
+    lastUsedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps,
+    versionKey: false,
+  },
+);
+
+SessionSchema.index(
+  {
+    expiresAt: 1,
+  },
+  {
+    expireAfterSeconds: 0,
+  },
+);
+
+/* -------------------------------------------------------------------------- */
+/* MODEL REGISTRATION                                                          */
+/* -------------------------------------------------------------------------- */
+
+function registerModel(name, schema) {
+  return models[name] ?? model(name, schema);
+}
+
+export const User = registerModel("User", UserSchema);
+
+export const ProfessionalProfile = registerModel(
+  "ProfessionalProfile",
+  ProfessionalProfileSchema,
+);
+
+export const Organization = registerModel(
+  "Organization",
+  OrganizationSchema,
+);
+
+export const Advertisement = registerModel(
+  "Advertisement",
+  AdvertisementSchema,
+);
+
+export const Plan = registerModel("Plan", PlanSchema);
+
+export const Transaction = registerModel(
+  "Transaction",
+  TransactionSchema,
+);
+
+export const PaymentWebhook = registerModel(
+  "PaymentWebhook",
+  PaymentWebhookSchema,
+);
+
+export const Conversation = registerModel(
+  "Conversation",
+  ConversationSchema,
+);
+
+export const Message = registerModel("Message", MessageSchema);
+
+export const Notification = registerModel(
+  "Notification",
+  NotificationSchema,
+);
+
+export const AnalyticsEvent = registerModel(
+  "AnalyticsEvent",
+  AnalyticsEventSchema,
+);
+
+export const AuditLog = registerModel(
+  "AuditLog",
+  AuditLogSchema,
+);
+
+export const Session = registerModel("Session", SessionSchema);
+
+/* -------------------------------------------------------------------------- */
+/* MODEL COLLECTION                                                            */
+/* -------------------------------------------------------------------------- */
+
+export const modelsRegistry = Object.freeze({
+  User,
+  ProfessionalProfile,
+  Organization,
+  Advertisement,
+  Plan,
+  Transaction,
+  PaymentWebhook,
+  Conversation,
+  Message,
+  Notification,
+  AnalyticsEvent,
+  AuditLog,
+  Session,
+});
+
+/* -------------------------------------------------------------------------- */
+/* DATABASE HELPERS                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Returns the current Mongoose connection state.
+ *
+ * 0 = disconnected
+ * 1 = connected
+ * 2 = connecting
+ * 3 = disconnecting
+ */
+export function getDatabaseState() {
+  return mongoose.connection.readyState;
+}
+
+export function isDatabaseConnected() {
+  return mongoose.connection.readyState === 1;
+}
+
+/**
+ * Exposes the native MongoDB connection.
+ *
+ * This allows future repository implementations to use
+ * native MongoDB operations where appropriate without
+ * replacing the model layer.
+ */
+export function getDatabaseConnection() {
+  return mongoose.connection;
+}
+
+/**
+ * Creates indexes for all registered models.
+ *
+ * This should normally be called during controlled
+ * application startup/migration rather than on every
+ * ordinary request.
+ */
+export async function ensureIndexes() {
+  const modelList = Object.values(modelsRegistry);
+
+  for (const currentModel of modelList) {
+    await currentModel.createIndexes();
+  }
+
+  return {
+    models: modelList.map((currentModel) => currentModel.modelName),
+    indexed: true,
+  };
+}
+
+/**
+ * Returns a safe database health snapshot.
+ */
+export function getDatabaseHealth() {
+  const state = mongoose.connection.readyState;
+
+  const states = {
+    0: "disconnected",
+    1: "connected",
+    2: "connecting",
+    3: "disconnecting",
+  };
+
+  return {
+    connected: state === 1,
+    state,
+    status: states[state] ?? "unknown",
+    databaseName: mongoose.connection.name || null,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* EXPORTS                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export {
+  mongoose,
+  UserSchema,
+  ProfessionalProfileSchema,
+  OrganizationSchema,
+  AdvertisementSchema,
+  PlanSchema,
+  TransactionSchema,
+  PaymentWebhookSchema,
+  ConversationSchema,
+  MessageSchema,
+  NotificationSchema,
+  AnalyticsEventSchema,
+  AuditLogSchema,
+  SessionSchema,
+};
+
+export default modelsRegistry;
