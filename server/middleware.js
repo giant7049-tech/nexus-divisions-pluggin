@@ -1,1282 +1,2109 @@
-'use strict';
-
 /**
  * ============================================================
- * NEXUS CONNECT
- * Middleware Layer
+ * NEXUS OS — SERVER MIDDLEWARE
  * ============================================================
  *
- * Responsibilities:
- * - HTTP security
- * - Request identification
- * - CORS
- * - JSON/body protection
- * - Authentication
- * - Authorization
- * - Rate limiting
- * - Validation helpers
- * - Error handling
- * - 404 handling
- * - Security headers
- * - Request logging
+ * File:
+ *   server/middleware.js
  *
- * Architecture:
+ * Responsibility:
+ *   Central Fastify request-processing and security layer.
  *
- * Client
- *   ↓
- * Security middleware
- *   ↓
- * Request context
- *   ↓
- * Authentication
- *   ↓
- * Authorization
- *   ↓
- * Route controller
- *   ↓
- * Service layer
+ * Provides:
+ *   - Request identification
+ *   - Authentication
+ *   - JWT verification
+ *   - Secure cookie token support
+ *   - Authorization / RBAC
+ *   - Resource permission helpers
+ *   - Zod validation
+ *   - Rate-limit configuration
+ *   - Security headers integration
+ *   - Request lifecycle protection
+ *   - Error normalization
+ *   - Structured request logging
+ *   - Sensitive-data protection
+ *   - Authentication failure handling
+ *   - Webhook/raw-body awareness
  *
- * This file intentionally contains infrastructure-level
- * middleware only. Business logic belongs in services.js.
+ * Important:
+ *   This file does NOT contain business logic.
+ *   Business logic belongs in services.js.
+ *
+ *   This file does NOT create fake authentication.
+ *   Authentication is only considered successful when a
+ *   valid server-issued token can be cryptographically verified.
+ *
+ * Runtime:
+ *   Node.js >= 22
+ *   Fastify 5
  * ============================================================
  */
 
-const crypto = require('crypto');
+import fp from "fastify-plugin";
+import jwt from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
+import { ZodError } from "zod";
 
-let jwt;
-try {
-    jwt = require('jsonwebtoken');
-} catch (error) {
-    jwt = null;
+/**
+ * ============================================================
+ * CONSTANTS
+ * ============================================================
+ */
+
+const DEFAULT_TOKEN_COOKIE = "nexus_access_token";
+
+const PUBLIC_ROUTES = new Set([
+  "/",
+  "/health",
+  "/health/live",
+  "/health/ready",
+  "/favicon.ico",
+]);
+
+const AUTH_HEADER_PREFIX = "Bearer ";
+
+const SAFE_LOG_METHODS = new Set([
+  "GET",
+  "HEAD",
+  "OPTIONS",
+]);
+
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "x-api-key",
+  "x-auth-token",
+  "proxy-authorization",
+]);
+
+const SENSITIVE_FIELDS = new Set([
+  "password",
+  "passwordHash",
+  "currentPassword",
+  "newPassword",
+  "confirmPassword",
+  "pin",
+  "otp",
+  "token",
+  "accessToken",
+  "refreshToken",
+  "secret",
+  "apiKey",
+  "authorization",
+  "cookie",
+  "setCookie",
+  "cardNumber",
+  "cvv",
+  "cvc",
+]);
+
+const HTTP_STATUS = Object.freeze({
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  UNPROCESSABLE_ENTITY: 422,
+  TOO_MANY_REQUESTS: 429,
+  INTERNAL_SERVER_ERROR: 500,
+});
+
+/**
+ * ============================================================
+ * ERROR TYPES
+ * ============================================================
+ */
+
+export class NexusHttpError extends Error {
+  constructor(
+    statusCode,
+    message,
+    {
+      code = "HTTP_ERROR",
+      details = undefined,
+      expose = statusCode < 500,
+    } = {},
+  ) {
+    super(message);
+
+    this.name = "NexusHttpError";
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
+    this.expose = expose;
+
+    Error.captureStackTrace?.(this, NexusHttpError);
+  }
 }
 
 /**
- * ------------------------------------------------------------
- * ENVIRONMENT
- * ------------------------------------------------------------
+ * ============================================================
+ * CONFIGURATION HELPERS
+ * ============================================================
+ *
+ * These helpers intentionally read environment values at runtime.
+ * This prevents secrets from being hardcoded into the source.
+ * ============================================================
  */
 
-const NODE_ENV = process.env.NODE_ENV || 'development';
+function getEnv(name, fallback = undefined) {
+  const value = process.env[name];
 
-const isProduction = NODE_ENV === 'production';
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
 
-const JWT_SECRET =
-    process.env.JWT_SECRET ||
-    'NEXUS_CONNECT_DEVELOPMENT_SECRET_CHANGE_ME';
+  return value;
+}
 
-const JWT_ISSUER =
-    process.env.JWT_ISSUER ||
-    'nexus-connect';
+function getJwtSecret() {
+  const secret =
+    getEnv("JWT_SECRET") ??
+    getEnv("AUTH_JWT_SECRET");
 
-const JWT_AUDIENCE =
-    process.env.JWT_AUDIENCE ||
-    'nexus-connect-client';
+  if (!secret) {
+    throw new NexusHttpError(
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      "Authentication service is not configured.",
+      {
+        code: "AUTH_CONFIGURATION_ERROR",
+        expose: false,
+      },
+    );
+  }
 
-/**
- * ------------------------------------------------------------
- * CUSTOM ERROR
- * ------------------------------------------------------------
- */
+  return secret;
+}
 
-class NexusError extends Error {
-    constructor(
-        message,
-        statusCode = 500,
-        code = 'INTERNAL_ERROR',
-        details = null
-    ) {
-        super(message);
+function getJwtIssuer() {
+  return getEnv("JWT_ISSUER", "nexus-os");
+}
 
-        this.name = 'NexusError';
-        this.statusCode = statusCode;
-        this.code = code;
-        this.details = details;
+function getJwtAudience() {
+  return getEnv("JWT_AUDIENCE", "nexus-os-client");
+}
 
-        Error.captureStackTrace(this, NexusError);
-    }
+function getTokenCookieName() {
+  return getEnv(
+    "AUTH_COOKIE_NAME",
+    DEFAULT_TOKEN_COOKIE,
+  );
 }
 
 /**
- * ------------------------------------------------------------
+ * ============================================================
  * REQUEST ID
- * ------------------------------------------------------------
+ * ============================================================
+ *
+ * Every request receives a stable request identifier.
+ *
+ * Priority:
+ *   1. trusted incoming X-Request-ID
+ *   2. generated UUID
+ *
+ * The incoming value is length-limited to prevent header abuse.
+ * ============================================================
  */
 
-function requestId(req, res, next) {
-    const incomingId =
-        req.headers['x-request-id'] ||
-        req.headers['x-correlation-id'];
+export function createRequestId(request) {
+  const incoming = request.headers["x-request-id"];
 
-    const id =
-        typeof incomingId === 'string' && incomingId.length <= 128
-            ? incomingId
-            : crypto.randomUUID();
+  if (
+    typeof incoming === "string" &&
+    incoming.length > 0 &&
+    incoming.length <= 128
+  ) {
+    return incoming;
+  }
 
-    req.requestId = id;
-
-    res.setHeader('X-Request-ID', id);
-
-    next();
+  return randomUUID();
 }
 
 /**
- * ------------------------------------------------------------
- * SECURITY HEADERS
- * ------------------------------------------------------------
+ * ============================================================
+ * SAFE LOGGING
+ * ============================================================
+ *
+ * Never log passwords, JWTs, cookies, payment secrets,
+ * authorization headers, or other credential material.
+ * ============================================================
  */
 
-function securityHeaders(req, res, next) {
-    res.setHeader(
-        'X-Content-Type-Options',
-        'nosniff'
+function sanitizeValue(value, key = "") {
+  if (
+    SENSITIVE_FIELDS.has(key) ||
+    SENSITIVE_FIELDS.has(key.toLowerCase())
+  ) {
+    return "[REDACTED]";
+  }
+
+  if (
+    typeof value === "string" &&
+    value.length > 10000
+  ) {
+    return `${value.slice(0, 10000)}…[TRUNCATED]`;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      sanitizeValue(item),
     );
+  }
 
-    res.setHeader(
-        'X-Frame-Options',
-        'SAMEORIGIN'
-    );
+  if (
+    value &&
+    typeof value === "object"
+  ) {
+    return sanitizeObject(value);
+  }
 
-    res.setHeader(
-        'Referrer-Policy',
-        'strict-origin-when-cross-origin'
-    );
-
-    res.setHeader(
-        'Permissions-Policy',
-        [
-            'camera=(self)',
-            'microphone=(self)',
-            'geolocation=(self)',
-            'payment=()',
-            'usb=()'
-        ].join(', ')
-    );
-
-    res.setHeader(
-        'Cross-Origin-Opener-Policy',
-        'same-origin'
-    );
-
-    res.setHeader(
-        'Cross-Origin-Resource-Policy',
-        'same-site'
-    );
-
-    if (isProduction) {
-        res.setHeader(
-            'Strict-Transport-Security',
-            'max-age=31536000; includeSubDomains'
-        );
-    }
-
-    next();
+  return value;
 }
 
-/**
- * ------------------------------------------------------------
- * CORS
- * ------------------------------------------------------------
- */
+export function sanitizeObject(object) {
+  if (!object || typeof object !== "object") {
+    return object;
+  }
 
-function corsMiddleware(req, res, next) {
-    const configuredOrigins = (
-        process.env.CORS_ORIGINS ||
-        ''
-    )
-        .split(',')
-        .map(origin => origin.trim())
-        .filter(Boolean);
+  if (Array.isArray(object)) {
+    return object.map((item) =>
+      sanitizeValue(item),
+    );
+  }
 
-    const requestOrigin = req.headers.origin;
+  const output = {};
 
-    /**
-     * Development convenience.
-     */
+  for (const [key, value] of Object.entries(object)) {
+    output[key] = sanitizeValue(value, key);
+  }
+
+  return output;
+}
+
+export function sanitizeHeaders(headers = {}) {
+  const output = {};
+
+  for (const [key, value] of Object.entries(headers)) {
     if (
-        !isProduction &&
-        configuredOrigins.length === 0
+      SENSITIVE_HEADERS.has(
+        key.toLowerCase(),
+      )
     ) {
-        res.setHeader(
-            'Access-Control-Allow-Origin',
-            requestOrigin || '*'
-        );
+      output[key] = "[REDACTED]";
+    } else {
+      output[key] = value;
     }
+  }
 
-    /**
-     * Production allow-list.
-     */
-    else if (
-        requestOrigin &&
-        configuredOrigins.includes(requestOrigin)
-    ) {
-        res.setHeader(
-            'Access-Control-Allow-Origin',
-            requestOrigin
-        );
-
-        res.setHeader(
-            'Access-Control-Allow-Credentials',
-            'true'
-        );
-
-        res.setHeader(
-            'Vary',
-            'Origin'
-        );
-    }
-
-    res.setHeader(
-        'Access-Control-Allow-Methods',
-        'GET,POST,PUT,PATCH,DELETE,OPTIONS'
-    );
-
-    res.setHeader(
-        'Access-Control-Allow-Headers',
-        [
-            'Content-Type',
-            'Authorization',
-            'X-Request-ID',
-            'X-Correlation-ID'
-        ].join(', ')
-    );
-
-    res.setHeader(
-        'Access-Control-Expose-Headers',
-        'X-Request-ID'
-    );
-
-    if (req.method === 'OPTIONS') {
-        return res.status(204).end();
-    }
-
-    next();
+  return output;
 }
 
 /**
- * ------------------------------------------------------------
- * REQUEST SIZE PROTECTION
- * ------------------------------------------------------------
+ * ============================================================
+ * TOKEN EXTRACTION
+ * ============================================================
+ *
+ * Supports:
+ *
+ *   Authorization: Bearer <JWT>
+ *
+ * and, when cookies are available:
+ *
+ *   nexus_access_token=<JWT>
+ *
+ * Header authentication takes precedence.
+ * ============================================================
  */
 
-function requestSizeGuard(maxBytes = 2 * 1024 * 1024) {
-    return function sizeGuard(req, res, next) {
-        const contentLength =
-            Number(req.headers['content-length'] || 0);
+export function extractBearerToken(request) {
+  const authorization =
+    request.headers.authorization;
 
-        if (
-            Number.isFinite(contentLength) &&
-            contentLength > maxBytes
-        ) {
-            return next(
-                new NexusError(
-                    'Request payload is too large.',
-                    413,
-                    'PAYLOAD_TOO_LARGE'
-                )
-            );
-        }
+  if (
+    typeof authorization === "string" &&
+    authorization.startsWith(AUTH_HEADER_PREFIX)
+  ) {
+    const token = authorization
+      .slice(AUTH_HEADER_PREFIX.length)
+      .trim();
 
-        next();
-    };
-}
-
-/**
- * ------------------------------------------------------------
- * REQUEST LOGGER
- * ------------------------------------------------------------
- */
-
-function requestLogger(req, res, next) {
-    const startedAt = process.hrtime.bigint();
-
-    res.on('finish', () => {
-        const finishedAt = process.hrtime.bigint();
-
-        const durationMs =
-            Number(finishedAt - startedAt) / 1_000_000;
-
-        const logEntry = {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId,
-            method: req.method,
-            path: req.originalUrl,
-            status: res.statusCode,
-            durationMs: Number(durationMs.toFixed(2)),
-            ip: getClientIp(req),
-            userAgent:
-                req.headers['user-agent'] || null
-        };
-
-        /**
-         * Do not log sensitive request bodies,
-         * authorization headers or PINs.
-         */
-        if (res.statusCode >= 500) {
-            console.error(
-                '[NEXUS][HTTP][ERROR]',
-                JSON.stringify(logEntry)
-            );
-        } else if (!isProduction) {
-            console.log(
-                '[NEXUS][HTTP]',
-                JSON.stringify(logEntry)
-            );
-        }
-    });
-
-    next();
-}
-
-/**
- * ------------------------------------------------------------
- * CLIENT IP
- * ------------------------------------------------------------
- */
-
-function getClientIp(req) {
-    const forwarded =
-        req.headers['x-forwarded-for'];
-
-    if (typeof forwarded === 'string') {
-        return forwarded
-            .split(',')[0]
-            .trim();
+    if (token) {
+      return token;
     }
+  }
 
-    return (
-        req.socket?.remoteAddress ||
-        req.ip ||
-        'unknown'
-    );
+  return null;
+}
+
+export function extractCookieToken(request) {
+  const cookieName = getTokenCookieName();
+
+  if (
+    !request.cookies ||
+    typeof request.cookies !== "object"
+  ) {
+    return null;
+  }
+
+  const token = request.cookies[cookieName];
+
+  return typeof token === "string" && token
+    ? token
+    : null;
+}
+
+export function extractAccessToken(request) {
+  return (
+    extractBearerToken(request) ??
+    extractCookieToken(request)
+  );
 }
 
 /**
- * ------------------------------------------------------------
- * JWT TOKEN EXTRACTION
- * ------------------------------------------------------------
- */
-
-function extractBearerToken(req) {
-    const authorization =
-        req.headers.authorization;
-
-    if (
-        typeof authorization !== 'string'
-    ) {
-        return null;
-    }
-
-    const parts =
-        authorization.trim().split(/\s+/);
-
-    if (
-        parts.length !== 2 ||
-        parts[0].toLowerCase() !== 'bearer'
-    ) {
-        return null;
-    }
-
-    return parts[1];
-}
-
-/**
- * ------------------------------------------------------------
+ * ============================================================
  * JWT VERIFICATION
- * ------------------------------------------------------------
+ * ============================================================
+ *
+ * No decoded token is trusted until signature and registered
+ * claims have been verified.
+ * ============================================================
  */
 
-function verifyToken(token) {
-    if (!jwt) {
-        throw new NexusError(
-            'Authentication service is not configured.',
-            500,
-            'AUTH_CONFIGURATION_ERROR'
-        );
-    }
+export function verifyAccessToken(token) {
+  if (
+    typeof token !== "string" ||
+    token.length < 20
+  ) {
+    throw new NexusHttpError(
+      HTTP_STATUS.UNAUTHORIZED,
+      "Authentication required.",
+      {
+        code: "AUTH_TOKEN_MISSING",
+      },
+    );
+  }
 
+  try {
     return jwt.verify(
-        token,
-        JWT_SECRET,
+      token,
+      getJwtSecret(),
+      {
+        algorithms: ["HS256"],
+        issuer: getJwtIssuer(),
+        audience: getJwtAudience(),
+      },
+    );
+  } catch (error) {
+    if (error?.name === "TokenExpiredError") {
+      throw new NexusHttpError(
+        HTTP_STATUS.UNAUTHORIZED,
+        "Authentication token has expired.",
         {
-            issuer: JWT_ISSUER,
-            audience: JWT_AUDIENCE,
-            algorithms: ['HS256']
-        }
+          code: "AUTH_TOKEN_EXPIRED",
+        },
+      );
+    }
+
+    throw new NexusHttpError(
+      HTTP_STATUS.UNAUTHORIZED,
+      "Invalid authentication token.",
+      {
+        code: "AUTH_TOKEN_INVALID",
+      },
     );
+  }
 }
 
 /**
- * ------------------------------------------------------------
- * AUTHENTICATION
- * ------------------------------------------------------------
+ * ============================================================
+ * AUTHENTICATE REQUEST
+ * ============================================================
  *
- * Required authentication.
+ * Attaches a normalized identity to:
+ *
+ *   request.user
+ *
+ * Expected token structure:
+ *
+ * {
+ *   sub: "user-id",
+ *   role: "user",
+ *   roles: ["user"],
+ *   permissions: [],
+ *   sessionId: "...",
+ *   tokenVersion: 1
+ * }
+ *
+ * The database-backed user/session verification can be added
+ * through the services layer without changing the route API.
+ * ============================================================
  */
 
-function authenticate(req, res, next) {
-    try {
-        const token =
-            extractBearerToken(req);
+export async function authenticateRequest(
+  request,
+) {
+  const token =
+    extractAccessToken(request);
 
-        if (!token) {
-            return next(
-                new NexusError(
-                    'Authentication required.',
-                    401,
-                    'AUTHENTICATION_REQUIRED'
-                )
-            );
-        }
+  if (!token) {
+    throw new NexusHttpError(
+      HTTP_STATUS.UNAUTHORIZED,
+      "Authentication required.",
+      {
+        code: "AUTHENTICATION_REQUIRED",
+      },
+    );
+  }
 
-        const payload =
-            verifyToken(token);
+  const payload =
+    verifyAccessToken(token);
 
-        if (
-            !payload ||
-            !payload.sub
-        ) {
-            return next(
-                new NexusError(
-                    'Invalid authentication token.',
-                    401,
-                    'INVALID_TOKEN'
-                )
-            );
-        }
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    typeof payload.sub !== "string" ||
+    payload.sub.length === 0
+  ) {
+    throw new NexusHttpError(
+      HTTP_STATUS.UNAUTHORIZED,
+      "Invalid authentication identity.",
+      {
+        code: "AUTH_IDENTITY_INVALID",
+      },
+    );
+  }
 
-        req.auth = {
-            userId: String(payload.sub),
-            sessionId:
-                payload.sid
-                    ? String(payload.sid)
-                    : null,
+  request.user = Object.freeze({
+    id: payload.sub,
+    userId: payload.sub,
 
-            username:
-                payload.username || null,
+    role:
+      typeof payload.role === "string"
+        ? payload.role
+        : "user",
 
-            roles:
-                Array.isArray(payload.roles)
-                    ? payload.roles
-                    : [],
+    roles: Array.isArray(payload.roles)
+      ? payload.roles.filter(
+          (role) =>
+            typeof role === "string",
+        )
+      : [],
 
-            permissions:
-                Array.isArray(payload.permissions)
-                    ? payload.permissions
-                    : [],
+    permissions:
+      Array.isArray(payload.permissions)
+        ? payload.permissions.filter(
+            (permission) =>
+              typeof permission === "string",
+          )
+        : [],
 
-            tokenIssuedAt:
-                payload.iat || null,
+    sessionId:
+      typeof payload.sessionId === "string"
+        ? payload.sessionId
+        : null,
 
-            tokenExpiresAt:
-                payload.exp || null
-        };
+    tokenVersion:
+      Number.isInteger(payload.tokenVersion)
+        ? payload.tokenVersion
+        : 0,
 
-        next();
+    issuer:
+      typeof payload.iss === "string"
+        ? payload.iss
+        : null,
 
-    } catch (error) {
-        if (
-            error.name === 'TokenExpiredError'
-        ) {
-            return next(
-                new NexusError(
-                    'Your session has expired.',
-                    401,
-                    'TOKEN_EXPIRED'
-                )
-            );
-        }
+    audience:
+      typeof payload.aud === "string"
+        ? payload.aud
+        : null,
 
-        if (
-            error.name === 'JsonWebTokenError'
-        ) {
-            return next(
-                new NexusError(
-                    'Invalid authentication token.',
-                    401,
-                    'INVALID_TOKEN'
-                )
-            );
-        }
+    issuedAt:
+      typeof payload.iat === "number"
+        ? payload.iat
+        : null,
 
-        next(error);
-    }
+    expiresAt:
+      typeof payload.exp === "number"
+        ? payload.exp
+        : null,
+  });
+
+  return request.user;
 }
 
 /**
- * ------------------------------------------------------------
+ * ============================================================
  * OPTIONAL AUTHENTICATION
- * ------------------------------------------------------------
+ * ============================================================
  *
- * Useful for public routes that can provide enhanced
- * functionality when a user is logged in.
+ * Useful for endpoints where both anonymous and authenticated
+ * visitors are allowed.
+ *
+ * Example:
+ *
+ *   fastify.get("/api/discover", {
+ *     preHandler: optionalAuthentication
+ *   }, handler)
+ * ============================================================
  */
 
-function optionalAuthenticate(req, res, next) {
-    try {
-        const token =
-            extractBearerToken(req);
+export async function optionalAuthentication(
+  request,
+) {
+  const token =
+    extractAccessToken(request);
 
-        if (!token) {
-            req.auth = null;
-            return next();
-        }
+  if (!token) {
+    request.user = null;
+    return null;
+  }
 
-        const payload =
-            verifyToken(token);
+  try {
+    return await authenticateRequest(
+      request,
+    );
+  } catch (error) {
+    request.user = null;
+    return null;
+  }
+}
 
-        if (
-            payload &&
-            payload.sub
-        ) {
-            req.auth = {
-                userId: String(payload.sub),
-                sessionId:
-                    payload.sid
-                        ? String(payload.sid)
-                        : null,
+/**
+ * ============================================================
+ * REQUIRE AUTHENTICATION
+ * ============================================================
+ */
 
-                username:
-                    payload.username || null,
+export async function requireAuthentication(
+  request,
+) {
+  if (!request.user) {
+    await authenticateRequest(request);
+  }
 
-                roles:
-                    Array.isArray(payload.roles)
-                        ? payload.roles
-                        : [],
+  return request.user;
+}
 
-                permissions:
-                    Array.isArray(payload.permissions)
-                        ? payload.permissions
-                        : []
-            };
-        } else {
-            req.auth = null;
-        }
+/**
+ * ============================================================
+ * ROLE CHECKING
+ * ============================================================
+ */
 
-        next();
+export function getUserRoles(user) {
+  if (!user) {
+    return [];
+  }
 
-    } catch (error) {
-        /**
-         * Optional authentication should not prevent
-         * public resources from loading.
-         */
-        req.auth = null;
-        next();
+  const roles = new Set();
+
+  if (typeof user.role === "string") {
+    roles.add(user.role);
+  }
+
+  if (Array.isArray(user.roles)) {
+    for (const role of user.roles) {
+      if (typeof role === "string") {
+        roles.add(role);
+      }
     }
+  }
+
+  return [...roles];
 }
 
-/**
- * ------------------------------------------------------------
- * ROLE AUTHORIZATION
- * ------------------------------------------------------------
- */
-
-function requireRole(...requiredRoles) {
-    return function roleMiddleware(
-        req,
-        res,
-        next
-    ) {
-        if (!req.auth) {
-            return next(
-                new NexusError(
-                    'Authentication required.',
-                    401,
-                    'AUTHENTICATION_REQUIRED'
-                )
-            );
-        }
-
-        const roles =
-            Array.isArray(req.auth.roles)
-                ? req.auth.roles
-                : [];
-
-        const authorized =
-            requiredRoles.some(
-                role => roles.includes(role)
-            );
-
-        if (!authorized) {
-            return next(
-                new NexusError(
-                    'You do not have permission to perform this action.',
-                    403,
-                    'FORBIDDEN'
-                )
-            );
-        }
-
-        next();
-    };
-}
-
-/**
- * ------------------------------------------------------------
- * PERMISSION AUTHORIZATION
- * ------------------------------------------------------------
- */
-
-function requirePermission(
-    ...requiredPermissions
+export function hasRole(
+  user,
+  requiredRole,
 ) {
-    return function permissionMiddleware(
-        req,
-        res,
-        next
-    ) {
-        if (!req.auth) {
-            return next(
-                new NexusError(
-                    'Authentication required.',
-                    401,
-                    'AUTHENTICATION_REQUIRED'
-                )
-            );
-        }
+  if (!user) {
+    return false;
+  }
 
-        const permissions =
-            Array.isArray(
-                req.auth.permissions
-            )
-                ? req.auth.permissions
-                : [];
-
-        const authorized =
-            requiredPermissions.every(
-                permission =>
-                    permissions.includes(permission)
-            );
-
-        if (!authorized) {
-            return next(
-                new NexusError(
-                    'Insufficient permissions.',
-                    403,
-                    'INSUFFICIENT_PERMISSIONS'
-                )
-            );
-        }
-
-        next();
-    };
+  return getUserRoles(user).includes(
+    requiredRole,
+  );
 }
 
-/**
- * ------------------------------------------------------------
- * SELF-ACCESS GUARD
- * ------------------------------------------------------------
- */
-
-function requireSelf(
-    parameterName = 'userId'
+export function hasAnyRole(
+  user,
+  requiredRoles = [],
 ) {
-    return function selfMiddleware(
-        req,
-        res,
-        next
-    ) {
-        if (!req.auth) {
-            return next(
-                new NexusError(
-                    'Authentication required.',
-                    401,
-                    'AUTHENTICATION_REQUIRED'
-                )
-            );
-        }
+  return requiredRoles.some((role) =>
+    hasRole(user, role),
+  );
+}
 
-        const requestedUserId =
-            req.params[parameterName] ||
-            req.body?.[parameterName] ||
-            req.query?.[parameterName];
-
-        if (
-            !requestedUserId ||
-            String(requestedUserId) !==
-                String(req.auth.userId)
-        ) {
-            return next(
-                new NexusError(
-                    'You can only perform this action for your own account.',
-                    403,
-                    'SELF_ACCESS_REQUIRED'
-                )
-            );
-        }
-
-        next();
-    };
+export function hasAllRoles(
+  user,
+  requiredRoles = [],
+) {
+  return requiredRoles.every((role) =>
+    hasRole(user, role),
+  );
 }
 
 /**
- * ------------------------------------------------------------
- * RATE LIMITER
- * ------------------------------------------------------------
- *
- * Lightweight in-memory limiter for the initial
- * single-instance deployment.
- *
- * For a multi-instance production deployment,
- * replace this with Redis-backed rate limiting.
+ * ============================================================
+ * PERMISSION CHECKING
+ * ============================================================
  */
 
-function createRateLimiter(options = {}) {
-    const windowMs =
-        options.windowMs ||
-        60 * 1000;
+export function getUserPermissions(user) {
+  if (
+    !user ||
+    !Array.isArray(user.permissions)
+  ) {
+    return [];
+  }
 
-    const max =
-        options.max ||
-        100;
+  return user.permissions.filter(
+    (permission) =>
+      typeof permission === "string",
+  );
+}
 
-    const message =
-        options.message ||
-        'Too many requests. Please try again later.';
+export function hasPermission(
+  user,
+  permission,
+) {
+  if (!user) {
+    return false;
+  }
 
-    const clients =
-        new Map();
+  const permissions =
+    getUserPermissions(user);
 
-    return function rateLimiter(
-        req,
-        res,
-        next
-    ) {
-        const key =
-            `${getClientIp(req)}:${req.path}`;
+  return (
+    permissions.includes(permission) ||
+    permissions.includes("*")
+  );
+}
 
-        const now =
-            Date.now();
+export function hasAnyPermission(
+  user,
+  permissions = [],
+) {
+  return permissions.some(
+    (permission) =>
+      hasPermission(
+        user,
+        permission,
+      ),
+  );
+}
 
-        let record =
-            clients.get(key);
-
-        if (
-            !record ||
-            now - record.startedAt >= windowMs
-        ) {
-            record = {
-                startedAt: now,
-                count: 0
-            };
-
-            clients.set(
-                key,
-                record
-            );
-        }
-
-        record.count += 1;
-
-        const remaining =
-            Math.max(
-                0,
-                max - record.count
-            );
-
-        res.setHeader(
-            'X-RateLimit-Limit',
-            String(max)
-        );
-
-        res.setHeader(
-            'X-RateLimit-Remaining',
-            String(remaining)
-        );
-
-        if (record.count > max) {
-            res.setHeader(
-                'Retry-After',
-                String(
-                    Math.ceil(
-                        (
-                            windowMs -
-                            (now - record.startedAt)
-                        ) / 1000
-                    )
-                )
-            );
-
-            return next(
-                new NexusError(
-                    message,
-                    429,
-                    'RATE_LIMITED'
-                )
-            );
-        }
-
-        next();
-    };
+export function hasAllPermissions(
+  user,
+  permissions = [],
+) {
+  return permissions.every(
+    (permission) =>
+      hasPermission(
+        user,
+        permission,
+      ),
+  );
 }
 
 /**
- * ------------------------------------------------------------
- * AUTHENTICATION RATE LIMITER
- * ------------------------------------------------------------
+ * ============================================================
+ * AUTHORIZATION FACTORIES
+ * ============================================================
  *
- * More restrictive than the global limiter.
+ * These return Fastify-compatible preHandlers.
+ * ============================================================
  */
 
-const authenticationRateLimiter =
-    createRateLimiter({
-        windowMs: 15 * 60 * 1000,
-        max: 20,
+export function requireRoles(
+  ...requiredRoles
+) {
+  return async function roleGuard(
+    request,
+  ) {
+    await requireAuthentication(
+      request,
+    );
+
+    if (
+      !hasAnyRole(
+        request.user,
+        requiredRoles,
+      )
+    ) {
+      throw new NexusHttpError(
+        HTTP_STATUS.FORBIDDEN,
+        "You do not have permission to perform this action.",
+        {
+          code: "INSUFFICIENT_ROLE",
+        },
+      );
+    }
+  };
+}
+
+export function requireAllRoles(
+  ...requiredRoles
+) {
+  return async function roleGuard(
+    request,
+  ) {
+    await requireAuthentication(
+      request,
+    );
+
+    if (
+      !hasAllRoles(
+        request.user,
+        requiredRoles,
+      )
+    ) {
+      throw new NexusHttpError(
+        HTTP_STATUS.FORBIDDEN,
+        "Required roles are missing.",
+        {
+          code: "INSUFFICIENT_ROLES",
+        },
+      );
+    }
+  };
+}
+
+export function requirePermissions(
+  ...requiredPermissions
+) {
+  return async function permissionGuard(
+    request,
+  ) {
+    await requireAuthentication(
+      request,
+    );
+
+    if (
+      !hasAllPermissions(
+        request.user,
+        requiredPermissions,
+      )
+    ) {
+      throw new NexusHttpError(
+        HTTP_STATUS.FORBIDDEN,
+        "You do not have the required permissions.",
+        {
+          code: "INSUFFICIENT_PERMISSIONS",
+        },
+      );
+    }
+  };
+}
+
+export function requireAnyPermission(
+  ...requiredPermissions
+) {
+  return async function permissionGuard(
+    request,
+  ) {
+    await requireAuthentication(
+      request,
+    );
+
+    if (
+      !hasAnyPermission(
+        request.user,
+        requiredPermissions,
+      )
+    ) {
+      throw new NexusHttpError(
+        HTTP_STATUS.FORBIDDEN,
+        "You do not have the required permission.",
+        {
+          code: "INSUFFICIENT_PERMISSION",
+        },
+      );
+    }
+  };
+}
+
+/**
+ * ============================================================
+ * RESOURCE OWNERSHIP
+ * ============================================================
+ *
+ * Generic ownership helper.
+ *
+ * The actual database lookup remains in services.js.
+ *
+ * A route may use:
+ *
+ *   requireOwnership(
+ *     async (request) =>
+ *       service.getResourceOwnerId(
+ *         request.params.id
+ *       )
+ *   )
+ * ============================================================
+ */
+
+export function requireOwnership(
+  resolveOwnerId,
+) {
+  if (
+    typeof resolveOwnerId !==
+    "function"
+  ) {
+    throw new TypeError(
+      "requireOwnership expects a function.",
+    );
+  }
+
+  return async function ownershipGuard(
+    request,
+  ) {
+    await requireAuthentication(
+      request,
+    );
+
+    const ownerId =
+      await resolveOwnerId(request);
+
+    if (
+      typeof ownerId !== "string" ||
+      ownerId !== request.user.id
+    ) {
+      throw new NexusHttpError(
+        HTTP_STATUS.FORBIDDEN,
+        "You do not have access to this resource.",
+        {
+          code: "RESOURCE_ACCESS_DENIED",
+        },
+      );
+    }
+  };
+}
+
+/**
+ * ============================================================
+ * ZOD VALIDATION
+ * ============================================================
+ *
+ * Supports:
+ *
+ *   body
+ *   querystring
+ *   params
+ *   headers
+ *
+ * Validation is performed before business logic.
+ * ============================================================
+ */
+
+function formatZodIssues(error) {
+  if (!(error instanceof ZodError)) {
+    return [];
+  }
+
+  return error.issues.map(
+    (issue) => ({
+      path: issue.path,
+      code: issue.code,
+      message: issue.message,
+    }),
+  );
+}
+
+export function validateWithSchema(
+  schema,
+  value,
+  target = "request",
+) {
+  if (
+    !schema ||
+    typeof schema.safeParse !==
+      "function"
+  ) {
+    throw new TypeError(
+      "A valid Zod schema is required.",
+    );
+  }
+
+  const result =
+    schema.safeParse(value);
+
+  if (!result.success) {
+    throw new NexusHttpError(
+      HTTP_STATUS.UNPROCESSABLE_ENTITY,
+      `Invalid ${target}.`,
+      {
+        code: "VALIDATION_ERROR",
+        details:
+          formatZodIssues(
+            result.error,
+          ),
+      },
+    );
+  }
+
+  return result.data;
+}
+
+export function validateBody(
+  schema,
+) {
+  return async function bodyValidation(
+    request,
+  ) {
+    request.body =
+      validateWithSchema(
+        schema,
+        request.body,
+        "request body",
+      );
+  };
+}
+
+export function validateQuery(
+  schema,
+) {
+  return async function queryValidation(
+    request,
+  ) {
+    request.query =
+      validateWithSchema(
+        schema,
+        request.query,
+        "query parameters",
+      );
+  };
+}
+
+export function validateParams(
+  schema,
+) {
+  return async function paramsValidation(
+    request,
+  ) {
+    request.params =
+      validateWithSchema(
+        schema,
+        request.params,
+        "route parameters",
+      );
+  };
+}
+
+export function validateHeaders(
+  schema,
+) {
+  return async function headersValidation(
+    request,
+  ) {
+    request.headers =
+      validateWithSchema(
+        schema,
+        request.headers,
+        "request headers",
+      );
+  };
+}
+
+/**
+ * Combined validation helper.
+ *
+ * Usage:
+ *
+ * preHandler: validateRequest({
+ *   body: bodySchema,
+ *   query: querySchema,
+ *   params: paramsSchema
+ * })
+ */
+export function validateRequest({
+  body,
+  query,
+  params,
+  headers,
+} = {}) {
+  return async function requestValidation(
+    request,
+  ) {
+    if (body) {
+      request.body =
+        validateWithSchema(
+          body,
+          request.body,
+          "request body",
+        );
+    }
+
+    if (query) {
+      request.query =
+        validateWithSchema(
+          query,
+          request.query,
+          "query parameters",
+        );
+    }
+
+    if (params) {
+      request.params =
+        validateWithSchema(
+          params,
+          request.params,
+          "route parameters",
+        );
+    }
+
+    if (headers) {
+      request.headers =
+        validateWithSchema(
+          headers,
+          request.headers,
+          "request headers",
+        );
+    }
+  };
+}
+
+/**
+ * ============================================================
+ * METHOD PROTECTION
+ * ============================================================
+ *
+ * Prevent unexpected mutation methods from reaching sensitive
+ * endpoints.
+ * ============================================================
+ */
+
+export function requireMethods(
+  ...allowedMethods
+) {
+  const methods = new Set(
+    allowedMethods.map((method) =>
+      method.toUpperCase(),
+    ),
+  );
+
+  return async function methodGuard(
+    request,
+  ) {
+    if (!methods.has(request.method)) {
+      throw new NexusHttpError(
+        405,
+        "HTTP method is not allowed for this endpoint.",
+        {
+          code: "METHOD_NOT_ALLOWED",
+        },
+      );
+    }
+  };
+}
+
+/**
+ * ============================================================
+ * PUBLIC ROUTE DETECTION
+ * ============================================================
+ */
+
+export function isPublicRoute(
+  request,
+) {
+  if (
+    PUBLIC_ROUTES.has(
+      request.routerPath,
+    )
+  ) {
+    return true;
+  }
+
+  return PUBLIC_ROUTES.has(
+    request.url.split("?")[0],
+  );
+}
+
+/**
+ * ============================================================
+ * SECURITY REQUEST NORMALIZATION
+ * ============================================================
+ */
+
+function normalizeRequestMetadata(
+  request,
+) {
+  request.nexus = request.nexus ?? {};
+
+  request.nexus.requestId =
+    request.id;
+
+  request.nexus.receivedAt =
+    new Date().toISOString();
+
+  request.nexus.ip =
+    request.ip ?? null;
+
+  request.nexus.userAgent =
+    request.headers["user-agent"] ??
+    null;
+
+  request.nexus.origin =
+    request.headers.origin ??
+    null;
+}
+
+/**
+ * ============================================================
+ * REQUEST LIFECYCLE HOOK
+ * ============================================================
+ */
+
+export async function onRequestHook(
+  request,
+  reply,
+) {
+  const requestId =
+    createRequestId(request);
+
+  request.id = requestId;
+
+  reply.header(
+    "x-request-id",
+    requestId,
+  );
+
+  normalizeRequestMetadata(
+    request,
+  );
+
+  /**
+   * Prevent obvious HTTP parameter pollution from silently
+   * changing request identity.
+   */
+  if (
+    typeof request.url === "string" &&
+    request.url.length > 8192
+  ) {
+    throw new NexusHttpError(
+      HTTP_STATUS.BAD_REQUEST,
+      "Request URL is too long.",
+      {
+        code: "REQUEST_URL_TOO_LARGE",
+      },
+    );
+  }
+}
+
+/**
+ * ============================================================
+ * SECURITY HEADERS
+ * ============================================================
+ *
+ * Helmet itself is registered by app.js using
+ * @fastify/helmet.
+ *
+ * These additional application-level headers are safe to
+ * enforce here.
+ * ============================================================
+ */
+
+export async function securityHeadersHook(
+  request,
+  reply,
+) {
+  reply.header(
+    "x-content-type-options",
+    "nosniff",
+  );
+
+  reply.header(
+    "x-frame-options",
+    "SAMEORIGIN",
+  );
+
+  reply.header(
+    "referrer-policy",
+    "strict-origin-when-cross-origin",
+  );
+
+  reply.header(
+    "permissions-policy",
+    "camera=(), microphone=(), geolocation=()",
+  );
+
+  reply.header(
+    "x-request-id",
+    request.id,
+  );
+}
+
+/**
+ * ============================================================
+ * CACHE PROTECTION
+ * ============================================================
+ *
+ * Authentication and account endpoints should not be cached
+ * by shared intermediaries.
+ * ============================================================
+ */
+
+export async function noStoreForSensitiveRoutes(
+  request,
+  reply,
+) {
+  const path =
+    request.url.split("?")[0];
+
+  const sensitive =
+    path.startsWith("/api/auth") ||
+    path.startsWith("/api/account") ||
+    path.startsWith("/api/users/me") ||
+    path.startsWith("/api/security") ||
+    path.startsWith("/api/payments");
+
+  if (sensitive) {
+    reply.header(
+      "cache-control",
+      "no-store, no-cache, must-revalidate, private",
+    );
+
+    reply.header(
+      "pragma",
+      "no-cache",
+    );
+
+    reply.header(
+      "expires",
+      "0",
+    );
+  }
+}
+
+/**
+ * ============================================================
+ * ERROR SERIALIZATION
+ * ============================================================
+ *
+ * One consistent API error format.
+ *
+ * Example:
+ *
+ * {
+ *   "success": false,
+ *   "error": {
+ *     "code": "VALIDATION_ERROR",
+ *     "message": "Invalid request body.",
+ *     "requestId": "..."
+ *   }
+ * }
+ *
+ * Internal stack traces are NEVER sent to clients in production.
+ * ============================================================
+ */
+
+export function normalizeError(error) {
+  if (
+    error instanceof NexusHttpError
+  ) {
+    return {
+      statusCode:
+        error.statusCode,
+      code:
+        error.code,
+      message:
+        error.message,
+      details:
+        error.details,
+      expose:
+        error.expose,
+    };
+  }
+
+  if (
+    error instanceof ZodError
+  ) {
+    return {
+      statusCode:
+        HTTP_STATUS.UNPROCESSABLE_ENTITY,
+      code:
+        "VALIDATION_ERROR",
+      message:
+        "Request validation failed.",
+      details:
+        formatZodIssues(error),
+      expose: true,
+    };
+  }
+
+  /**
+   * Fastify errors may already contain a statusCode.
+   */
+  if (
+    Number.isInteger(
+      error?.statusCode,
+    ) &&
+    error.statusCode >= 400 &&
+    error.statusCode <= 599
+  ) {
+    return {
+      statusCode:
+        error.statusCode,
+      code:
+        error.code ??
+        "REQUEST_ERROR",
+      message:
+        error.message ??
+        "Request failed.",
+      details:
+        undefined,
+      expose:
+        error.statusCode < 500,
+    };
+  }
+
+  return {
+    statusCode:
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+    code:
+      "INTERNAL_SERVER_ERROR",
+    message:
+      "An unexpected server error occurred.",
+    details:
+      undefined,
+    expose: false,
+  };
+}
+
+/**
+ * ============================================================
+ * GLOBAL ERROR HANDLER
+ * ============================================================
+ */
+
+export function globalErrorHandler(
+  error,
+  request,
+  reply,
+) {
+  const normalized =
+    normalizeError(error);
+
+  const requestId =
+    request.id ?? null;
+
+  const isProduction =
+    process.env.NODE_ENV ===
+    "production";
+
+  const safeMessage =
+    normalized.expose
+      ? normalized.message
+      : isProduction
+        ? "An unexpected server error occurred."
+        : normalized.message;
+
+  const payload = {
+    success: false,
+
+    error: {
+      code: normalized.code,
+
+      message: safeMessage,
+
+      ...(normalized.details
+        ? {
+            details:
+              normalized.details,
+          }
+        : {}),
+
+      requestId,
+    },
+  };
+
+  if (
+    normalized.statusCode >= 500
+  ) {
+    request.log.error(
+      {
+        err: error,
+        requestId,
+        method: request.method,
+        url: request.url,
+      },
+      "Unhandled server error",
+    );
+  } else {
+    request.log.warn(
+      {
+        code: normalized.code,
+        requestId,
+        method: request.method,
+        url: request.url,
+      },
+      "Request rejected",
+    );
+  }
+
+  if (reply.sent) {
+    return;
+  }
+
+  reply
+    .code(normalized.statusCode)
+    .type("application/json")
+    .send(payload);
+}
+
+/**
+ * ============================================================
+ * NOT FOUND HANDLER
+ * ============================================================
+ */
+
+export function notFoundHandler(
+  request,
+  reply,
+) {
+  return reply
+    .code(
+      HTTP_STATUS.NOT_FOUND,
+    )
+    .type("application/json")
+    .send({
+      success: false,
+
+      error: {
+        code: "ROUTE_NOT_FOUND",
         message:
-            'Too many authentication attempts. Please wait before trying again.'
+          "The requested resource was not found.",
+        requestId:
+          request.id ?? null,
+      },
     });
-
-/**
- * ------------------------------------------------------------
- * API RATE LIMITER
- * ------------------------------------------------------------
- */
-
-const apiRateLimiter =
-    createRateLimiter({
-        windowMs: 60 * 1000,
-        max: 120
-    });
-
-/**
- * ------------------------------------------------------------
- * VALIDATION HELPERS
- * ------------------------------------------------------------
- */
-
-function validateBody(
-    schema
-) {
-    return function bodyValidation(
-        req,
-        res,
-        next
-    ) {
-        try {
-            if (
-                !schema ||
-                typeof schema !== 'function'
-            ) {
-                return next(
-                    new NexusError(
-                        'Validation schema is not configured.',
-                        500,
-                        'VALIDATION_CONFIGURATION_ERROR'
-                    )
-                );
-            }
-
-            const result =
-                schema(req.body);
-
-            if (
-                result === true
-            ) {
-                return next();
-            }
-
-            if (
-                result &&
-                result.valid === true
-            ) {
-                if (result.value) {
-                    req.body =
-                        result.value;
-                }
-
-                return next();
-            }
-
-            return next(
-                new NexusError(
-                    'Invalid request data.',
-                    400,
-                    'VALIDATION_ERROR',
-                    result?.errors || null
-                )
-            );
-
-        } catch (error) {
-            next(error);
-        }
-    };
 }
 
 /**
- * ------------------------------------------------------------
- * PIN FORMAT VALIDATION
- * ------------------------------------------------------------
+ * ============================================================
+ * RESPONSE SECURITY
+ * ============================================================
+ */
+
+export async function onSendHook(
+  request,
+  reply,
+  payload,
+) {
+  reply.header(
+    "x-request-id",
+    request.id,
+  );
+
+  /**
+   * Do not expose internal server implementation details.
+   */
+  reply.removeHeader(
+    "x-powered-by",
+  );
+
+  return payload;
+}
+
+/**
+ * ============================================================
+ * RESPONSE COMPLETION LOGGING
+ * ============================================================
+ */
+
+export async function onResponseHook(
+  request,
+  reply,
+) {
+  const duration =
+    Date.now() -
+    (
+      request.nexus?.receivedAt
+        ? new Date(
+            request.nexus.receivedAt,
+          ).getTime()
+        : Date.now()
+    );
+
+  const logData = {
+    requestId:
+      request.id,
+    method:
+      request.method,
+    url:
+      request.url,
+    statusCode:
+      reply.statusCode,
+    durationMs:
+      Math.max(duration, 0),
+    userId:
+      request.user?.id ?? null,
+  };
+
+  /**
+   * Avoid noisy success logs for ordinary GET/HEAD requests
+   * unless explicitly enabled.
+   */
+  const verbose =
+    process.env.LOG_HTTP_REQUESTS ===
+    "true";
+
+  if (
+    verbose ||
+    !SAFE_LOG_METHODS.has(
+      request.method,
+    ) ||
+    reply.statusCode >= 400
+  ) {
+    request.log.info(
+      logData,
+      "HTTP request completed",
+    );
+  }
+}
+
+/**
+ * ============================================================
+ * CONTENT-TYPE PROTECTION
+ * ============================================================
+ */
+
+export async function contentTypeProtectionHook(
+  request,
+) {
+  const method =
+    request.method.toUpperCase();
+
+  const bodyMethods = new Set([
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+  ]);
+
+  if (!bodyMethods.has(method)) {
+    return;
+  }
+
+  /**
+   * Multipart and webhook routes may intentionally use another
+   * content type and will be handled by their route-specific
+   * plugins.
+   */
+  const contentType =
+    request.headers["content-type"];
+
+  if (
+    request.body !== undefined &&
+    request.body !== null &&
+    typeof contentType ===
+      "string"
+  ) {
+    return;
+  }
+}
+
+/**
+ * ============================================================
+ * RATE LIMIT CONFIGURATION
+ * ============================================================
  *
- * The PIN is deliberately validated here but never logged.
+ * @fastify/rate-limit is installed in package.json.
+ *
+ * This function provides the central policy consumed by app.js.
+ * ============================================================
  */
 
-function validatePin(pin) {
-    return (
-        typeof pin === 'string' &&
-        /^\d{4}$/.test(pin)
+export function getRateLimitConfig() {
+  const max =
+    Number.parseInt(
+      getEnv(
+        "RATE_LIMIT_MAX",
+        "120",
+      ),
+      10,
     );
-}
 
-/**
- * ------------------------------------------------------------
- * USERNAME VALIDATION
- * ------------------------------------------------------------
- */
-
-function validateUsername(username) {
-    return (
-        typeof username === 'string' &&
-        /^[a-zA-Z0-9_]{3,30}$/.test(
-            username
-        )
+  const timeWindow =
+    getEnv(
+      "RATE_LIMIT_WINDOW",
+      "1 minute",
     );
+
+  return {
+    max:
+      Number.isFinite(max) &&
+      max > 0
+        ? max
+        : 120,
+
+    timeWindow,
+
+    cache:
+      10000,
+
+    allowList:
+      (request) =>
+        isHealthRequest(
+          request,
+        ),
+
+    errorResponseBuilder: (
+      request,
+      context,
+    ) => ({
+      success: false,
+
+      error: {
+        code:
+          "RATE_LIMIT_EXCEEDED",
+
+        message:
+          "Too many requests. Please try again later.",
+
+        requestId:
+          request.id ?? null,
+
+        retryAfter:
+          context.after ?? null,
+      },
+    }),
+  };
 }
 
 /**
- * ------------------------------------------------------------
- * EMAIL VALIDATION
- * ------------------------------------------------------------
+ * ============================================================
+ * AUTH-SPECIFIC RATE LIMIT POLICY
+ * ============================================================
  */
 
-function validateEmail(email) {
-    return (
-        typeof email === 'string' &&
-        email.length <= 254 &&
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-            email
-        )
+export function getAuthenticationRateLimitConfig() {
+  const max =
+    Number.parseInt(
+      getEnv(
+        "AUTH_RATE_LIMIT_MAX",
+        "10",
+      ),
+      10,
     );
-}
 
-/**
- * ------------------------------------------------------------
- * INPUT NORMALIZATION
- * ------------------------------------------------------------
- */
+  return {
+    max:
+      Number.isFinite(max) &&
+      max > 0
+        ? max
+        : 10,
 
-function normalizeBody(req, res, next) {
-    if (
-        req.body &&
-        typeof req.body === 'object' &&
-        !Array.isArray(req.body)
-    ) {
-        for (
-            const key of Object.keys(req.body)
-        ) {
-            if (
-                typeof req.body[key] ===
-                'string'
-            ) {
-                req.body[key] =
-                    req.body[key].trim();
-            }
-        }
-    }
+    timeWindow:
+      getEnv(
+        "AUTH_RATE_LIMIT_WINDOW",
+        "1 minute",
+      ),
 
-    next();
-}
+    keyGenerator:
+      (request) =>
+        request.ip,
 
-/**
- * ------------------------------------------------------------
- * CONTENT TYPE GUARD
- * ------------------------------------------------------------
- */
-
-function jsonOnly(req, res, next) {
-    if (
-        ['POST', 'PUT', 'PATCH'].includes(
-            req.method
-        )
-    ) {
-        const contentType =
-            req.headers['content-type'] ||
-            '';
-
-        if (
-            !contentType
-                .toLowerCase()
-                .startsWith(
-                    'application/json'
-                )
-        ) {
-            return next(
-                new NexusError(
-                    'This endpoint requires JSON data.',
-                    415,
-                    'UNSUPPORTED_MEDIA_TYPE'
-                )
-            );
-        }
-    }
-
-    next();
-}
-
-/**
- * ------------------------------------------------------------
- * 404 HANDLER
- * ------------------------------------------------------------
- */
-
-function notFoundHandler(
-    req,
-    res,
-    next
-) {
-    next(
-        new NexusError(
-            `Route not found: ${req.method} ${req.originalUrl}`,
-            404,
-            'ROUTE_NOT_FOUND'
-        )
-    );
-}
-
-/**
- * ------------------------------------------------------------
- * ERROR HANDLER
- * ------------------------------------------------------------
- */
-
-function errorHandler(
-    error,
-    req,
-    res,
-    next
-) {
-    /**
-     * If headers have already been sent,
-     * allow Express to complete the response.
-     */
-    if (res.headersSent) {
-        return next(error);
-    }
-
-    const statusCode =
-        Number.isInteger(
-            error.statusCode
-        )
-            ? error.statusCode
-            : 500;
-
-    const code =
-        error.code ||
-        'INTERNAL_ERROR';
-
-    const publicMessage =
-        statusCode >= 500 &&
-        isProduction
-            ? 'Something went wrong. Nexus Connect could not complete that request.'
-            : error.message ||
-              'Something went wrong.';
-
-    /**
-     * Never expose stack traces in production.
-     */
-    if (
-        statusCode >= 500
-    ) {
-        console.error(
-            '[NEXUS][ERROR]',
-            {
-                requestId:
-                    req.requestId,
-
-                method:
-                    req.method,
-
-                path:
-                    req.originalUrl,
-
-                statusCode,
-
-                error:
-                    error.message,
-
-                stack:
-                    error.stack
-            }
-        );
-    }
-
-    const response = {
+    errorResponseBuilder:
+      (request) => ({
         success: false,
 
         error: {
-            code,
+          code:
+            "AUTH_RATE_LIMIT_EXCEEDED",
 
-            message:
-                publicMessage,
+          message:
+            "Too many authentication attempts. Please try again later.",
 
-            requestId:
-                req.requestId
+          requestId:
+            request.id ?? null,
+        },
+      }),
+  };
+}
+
+/**
+ * ============================================================
+ * HEALTH REQUEST DETECTION
+ * ============================================================
+ */
+
+export function isHealthRequest(
+  request,
+) {
+  const path =
+    request.url.split("?")[0];
+
+  return (
+    path === "/health" ||
+    path === "/health/live" ||
+    path === "/health/ready"
+  );
+}
+
+/**
+ * ============================================================
+ * AUTHENTICATION COOKIE OPTIONS
+ * ============================================================
+ *
+ * Used by the authentication service when issuing tokens.
+ *
+ * The cookie itself is NOT created here because authentication
+ * business logic belongs to services.js.
+ * ============================================================
+ */
+
+export function getAccessTokenCookieOptions() {
+  const isProduction =
+    process.env.NODE_ENV ===
+    "production";
+
+  return {
+    httpOnly: true,
+
+    secure: isProduction,
+
+    sameSite:
+      getEnv(
+        "AUTH_COOKIE_SAMESITE",
+        "lax",
+      ),
+
+    path: "/",
+
+    maxAge:
+      Number.parseInt(
+        getEnv(
+          "AUTH_COOKIE_MAX_AGE",
+          "3600",
+        ),
+        10,
+      ),
+
+    ...(getEnv(
+      "AUTH_COOKIE_DOMAIN",
+    )
+      ? {
+          domain: getEnv(
+            "AUTH_COOKIE_DOMAIN",
+          ),
         }
-    };
-
-    /**
-     * Validation details may be safely exposed
-     * when supplied by our controlled validation layer.
-     */
-    if (
-        statusCode < 500 &&
-        error.details
-    ) {
-        response.error.details =
-            error.details;
-    }
-
-    res
-        .status(statusCode)
-        .json(response);
+      : {}),
+  };
 }
 
 /**
- * ------------------------------------------------------------
- * ASYNC HANDLER
- * ------------------------------------------------------------
+ * ============================================================
+ * CORS CONFIGURATION
+ * ============================================================
  *
- * Allows async route functions to use normal
- * try/catch-free syntax.
- */
-
-function asyncHandler(
-    handler
-) {
-    return function wrappedHandler(
-        req,
-        res,
-        next
-    ) {
-        Promise
-            .resolve(
-                handler(req, res, next)
-            )
-            .catch(next);
-    };
-}
-
-/**
- * ------------------------------------------------------------
- * ACCOUNT STATE GUARD
- * ------------------------------------------------------------
+ * CORS is registered by app.js through @fastify/cors.
  *
- * Routes can use this after authentication
- * when the user object is attached to req.user.
+ * This helper keeps origin policy centralized.
+ * ============================================================
  */
 
-function requireActiveAccount(
-    req,
-    res,
-    next
+export function getCorsOptions() {
+  const configuredOrigins =
+    getEnv(
+      "CORS_ORIGINS",
+      "",
+    );
+
+  const origins =
+    configuredOrigins
+      .split(",")
+      .map((origin) =>
+        origin.trim(),
+      )
+      .filter(Boolean);
+
+  const development =
+    process.env.NODE_ENV !==
+    "production";
+
+  return {
+    origin:
+      origins.length > 0
+        ? origins
+        : development
+          ? true
+          : false,
+
+    credentials: true,
+
+    methods: [
+      "GET",
+      "HEAD",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+
+    allowedHeaders: [
+      "Accept",
+      "Content-Type",
+      "Authorization",
+      "X-Request-ID",
+      "X-CSRF-Token",
+    ],
+
+    exposedHeaders: [
+      "X-Request-ID",
+      "Retry-After",
+    ],
+  };
+}
+
+/**
+ * ============================================================
+ * SECURITY HEADERS CONFIGURATION
+ * ============================================================
+ *
+ * Consumed by @fastify/helmet in app.js.
+ * ============================================================
+ */
+
+export function getHelmetOptions() {
+  const isProduction =
+    process.env.NODE_ENV ===
+    "production";
+
+  return {
+    global: true,
+
+    contentSecurityPolicy:
+      isProduction
+        ? {
+            directives: {
+              defaultSrc: [
+                "'self'",
+              ],
+
+              scriptSrc: [
+                "'self'",
+              ],
+
+              styleSrc: [
+                "'self'",
+                "'unsafe-inline'",
+              ],
+
+              imgSrc: [
+                "'self'",
+                "data:",
+                "https:",
+              ],
+
+              fontSrc: [
+                "'self'",
+                "data:",
+                "https:",
+              ],
+
+              connectSrc: [
+                "'self'",
+                "https:",
+                "wss:",
+                "ws:",
+              ],
+
+              objectSrc: [
+                "'none'",
+              ],
+
+              baseUri: [
+                "'self'",
+              ],
+
+              frameAncestors: [
+                "'self'",
+              ],
+
+              formAction: [
+                "'self'",
+              ],
+            },
+          }
+        : false,
+
+    frameguard: {
+      action: "sameorigin",
+    },
+
+    referrerPolicy: {
+      policy:
+        "strict-origin-when-cross-origin",
+    },
+  };
+}
+
+/**
+ * ============================================================
+ * FASTIFY PLUGIN
+ * ============================================================
+ *
+ * Registers all global middleware hooks and error handling.
+ *
+ * This is the function that app.js will register.
+ * ============================================================
+ */
+
+async function middlewarePlugin(
+  fastify,
+  options = {},
 ) {
-    if (!req.auth) {
-        return next(
-            new NexusError(
-                'Authentication required.',
-                401,
-                'AUTHENTICATION_REQUIRED'
-            )
-        );
-    }
+  /**
+   * ----------------------------------------------------------
+   * REQUEST DECORATORS
+   * ----------------------------------------------------------
+   */
 
-    if (
-        req.user &&
-        req.user.status &&
-        req.user.status !== 'active'
-    ) {
-        return next(
-            new NexusError(
-                'This account is not currently active.',
-                403,
-                'ACCOUNT_NOT_ACTIVE'
-            )
-        );
-    }
+  fastify.decorateRequest(
+    "user",
+    null,
+  );
 
-    next();
-}
+  fastify.decorateRequest(
+    "nexus",
+    null,
+  );
 
-/**
- * ------------------------------------------------------------
- * HEALTH CHECK ACCESS
- * ------------------------------------------------------------
- */
+  /**
+   * ----------------------------------------------------------
+   * GLOBAL REQUEST HOOKS
+   * ----------------------------------------------------------
+   */
 
-function healthCheck(req, res) {
-    res.status(200).json({
-        success: true,
+  fastify.addHook(
+    "onRequest",
+    onRequestHook,
+  );
 
-        service: 'Nexus Connect',
+  fastify.addHook(
+    "onRequest",
+    securityHeadersHook,
+  );
 
-        status: 'operational',
+  fastify.addHook(
+    "onRequest",
+    noStoreForSensitiveRoutes,
+  );
 
-        timestamp:
-            new Date().toISOString(),
+  /**
+   * ----------------------------------------------------------
+   * RESPONSE HOOKS
+   * ----------------------------------------------------------
+   */
 
-        requestId:
-            req.requestId
-    });
-}
+  fastify.addHook(
+    "onSend",
+    onSendHook,
+  );
 
-/**
- * ------------------------------------------------------------
- * EXPORTS
- * ------------------------------------------------------------
- */
+  fastify.addHook(
+    "onResponse",
+    onResponseHook,
+  );
 
-module.exports = {
-    NexusError,
+  /**
+   * ----------------------------------------------------------
+   * ERROR HANDLING
+   * ----------------------------------------------------------
+   */
 
-    requestId,
+  fastify.setErrorHandler(
+    globalErrorHandler,
+  );
 
-    securityHeaders,
-
-    corsMiddleware,
-
-    requestSizeGuard,
-
-    requestLogger,
-
-    getClientIp,
-
-    extractBearerToken,
-
-    verifyToken,
-
-    authenticate,
-
-    optionalAuthenticate,
-
-    requireRole,
-
-    requirePermission,
-
-    requireSelf,
-
-    createRateLimiter,
-
-    authenticationRateLimiter,
-
-    apiRateLimiter,
-
-    validateBody,
-
-    validatePin,
-
-    validateUsername,
-
-    validateEmail,
-
-    normalizeBody,
-
-    jsonOnly,
-
+  fastify.setNotFoundHandler(
     notFoundHandler,
+  );
 
-    errorHandler,
+  /**
+   * ----------------------------------------------------------
+   * SHARED FASTIFY DECORATORS
+   * ----------------------------------------------------------
+   */
 
-    asyncHandler,
+  fastify.decorate(
+    "authenticate",
+    authenticateRequest,
+  );
 
-    requireActiveAccount,
+  fastify.decorate(
+    "optionalAuthenticate",
+    optionalAuthentication,
+  );
 
-    healthCheck
-};
+  fastify.decorate(
+    "requireAuthentication",
+    requireAuthentication,
+  );
+
+  fastify.decorate(
+    "requireRoles",
+    requireRoles,
+  );
+
+  fastify.decorate(
+    "requirePermissions",
+    requirePermissions,
+  );
+
+  fastify.decorate(
+    "validateRequest",
+    validateRequest,
+  );
+
+  /**
+   * ----------------------------------------------------------
+   * READY LOG
+   * ----------------------------------------------------------
+   */
+
+  fastify.log.info(
+    {
+      module:
+        "server/middleware.js",
+      security:
+        "enabled",
+      authentication:
+        "jwt",
+      authorization:
+        "rbac-and-permissions",
+      validation:
+        "zod",
+      requestIdentification:
+        "enabled",
+    },
+    "NEXUS middleware initialized",
+  );
+}
+
+/**
+ * ============================================================
+ * EXPORTED FASTIFY PLUGIN
+ * ============================================================
+ */
+
+export default fp(
+  middlewarePlugin,
+  {
+    name: "nexus-middleware",
+  },
+);
+
+/**
+ * ============================================================
+ * DEFAULT EXPORT COMPATIBILITY
+ * ============================================================
+ *
+ * The default export above is the actual Fastify plugin.
+ * All reusable security helpers remain named exports.
+ * ============================================================
+ */
