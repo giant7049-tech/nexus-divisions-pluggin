@@ -1,59 +1,84 @@
-# NEXUS DIVISIONS PLATFORM
+# NEXUS OS
 
-> A modern, secure, scalable digital platform for Nexus Buildsolutions Limited and its connected business divisions.
+### Nexus Buildsolutions Limited
+
+**Unified Digital Operating Platform**
 
 ---
 
-## 1. PROJECT OVERVIEW
+## 1. Platform Overview
 
-Nexus Divisions is a production-oriented web platform designed to provide a unified digital foundation for the Nexus ecosystem.
+NEXUS OS is the unified digital operating platform of **Nexus Buildsolutions Limited**.
 
-The platform is designed to support:
+The platform is designed as a production-grade, modular, API-first operating environment connecting:
 
-- Nexus Connect
-- Real Estate
+- Identity
+- Customers
+- Professionals
+- Organizations
+- Services
+- Jobs
+- Marketplace
+- Property
 - Construction
-- Interior
-- Bedding
-- Business services
-- Customer communication
-- User accounts
-- Messaging
-- Communities
-- Notifications
-- Media
-- AI-assisted services
-- Future Nexus ecosystem modules
+- Projects
+- Communications
+- Payments
+- Documents
+- Analytics
+- Intelligence
+- Automation
+- Governance
+- Integrations
 
-The architecture is intentionally modular so that additional Nexus divisions and services can be introduced without rebuilding the entire platform.
+NEXUS OS is intended to operate as a long-term platform rather than a single-purpose website.
+
+The architecture is therefore designed around:
+
+- Production-first engineering
+- Security-first development
+- Privacy by design
+- Modular services
+- API-first architecture
+- Mobile-first experiences
+- Event-driven communication
+- Realtime communication
+- Provider abstraction
+- Database abstraction
+- Contract-driven development
+- Observability
+- Auditability
+- Extensibility
+- Graceful degradation
+- Zero-trust access control
 
 ---
 
-# 2. CORE ARCHITECTURE
+# 2. Project Status
 
-The platform follows a separation-of-concerns architecture.
+**Platform:** NEXUS OS  
+**Organization:** Nexus Buildsolutions Limited  
+**Architecture Version:** 1.0.0  
+**Manifest Version:** 1.0.0  
+**Classification:** Production Platform  
+**Development Status:** Active Development  
+**Target Architecture:** 2030–2050
+
+This repository represents the actual platform foundation.
+
+It is not intended to be a static prototype or disposable demo.
+
+---
+
+# 3. Technology Foundation
+
+## Runtime
+
+- Node.js 22+
+- npm 10+
+
+The project currently targets:
 
 ```text
-USER
- │
- ▼
-NEXUS FRONTEND
- │
- │ HTTPS
- ▼
-EXPRESS APPLICATION
- │
- ├── Authentication
- ├── REST API
- ├── Business Services
- ├── Security Middleware
- ├── Socket.IO
- └── Static Assets
- │
- ▼
-DATABASE / EXTERNAL SERVICES
- │
- ├── MongoDB
- ├── Cloudinary
- ├── Email Provider
- └── Future AI Services
+Node.js >=22.0.0 <27.0.0
+npm >=10.0.0
