@@ -1,354 +1,617 @@
-'use strict';
-
 /**
- * ================================================================
- * NEXUS CONNECT
- * Production Server Entry Point
- * ================================================================
+ * ============================================================
+ * NEXUS OS — Production Server Entry Point
+ * ============================================================
+ *
+ * Responsibility:
+ *   - Load and validate configuration
+ *   - Create the Fastify application
+ *   - Establish database connectivity
+ *   - Create the HTTP server
+ *   - Attach Socket.IO
+ *   - Initialize realtime infrastructure
+ *   - Start the application
+ *   - Handle process signals
+ *   - Perform graceful shutdown
+ *   - Protect against unhandled process failures
  *
  * Architecture:
  *
  *   server.js
  *       │
  *       ├── config.js
+ *       │
  *       ├── app.js
- *       ├── sockets.js
- *       └── services.js
+ *       │
+ *       ├── models.js
+ *       │
+ *       └── sockets.js
+ *               │
+ *               ▼
+ *          Socket.IO
  *
- * Runtime:
- *   Node.js
- *   Express
- *   Socket.IO
- *   MongoDB
- *
- * Deployment:
- *   Render / compatible Node.js hosting
- *
- * IMPORTANT:
- *   - Never hard-code PORT.
- *   - Never place secrets in this file.
- *   - Secrets belong in environment variables.
- *   - The application must listen on 0.0.0.0 for cloud hosting.
- * ================================================================
+ * This file intentionally contains orchestration only.
+ * Business logic belongs in services.js.
+ * Database models belong in models.js.
+ * HTTP routes belong in routes.js.
+ * Security/request processing belongs in middleware.js.
+ * ============================================================
  */
 
-const http = require('http');
+import http from 'node:http';
 
-const config = require('./config');
+import process from 'node:process';
 
-const PORT = config.server.port;
-const HOST = config.server.host;
-const NODE_ENV = config.app.environment;
-const APP_NAME = config.app.name;
+import { Server as SocketIOServer } from 'socket.io';
 
-const SHUTDOWN_TIMEOUT_MS =
-    Number(process.env.SHUTDOWN_TIMEOUT_MS || 10000);
+import { buildApp } from './app.js';
+import {
+  connectDatabase,
+  disconnectDatabase,
+} from './models.js';
 
-const app = require('./app');
+import { registerSocketServer } from './sockets.js';
 
-const {
-    initializeSocketServer
-} = require('./sockets');
-
-const {
-    connectDatabase,
-    disconnectDatabase
-} = require('./services');
+import {
+  config,
+} from './config.js';
 
 
 /**
- * ================================================================
- * PROCESS STATE
- * ================================================================
+ * ============================================================
+ * APPLICATION STATE
+ * ============================================================
  */
 
-let server = null;
+let app = null;
+let httpServer = null;
+let io = null;
+
 let shuttingDown = false;
 
 
 /**
- * ================================================================
- * START SERVER
- * ================================================================
+ * ============================================================
+ * RUNTIME CONSTANTS
+ * ============================================================
+ */
+
+const HOST = config.server?.host ?? '0.0.0.0';
+
+const PORT = Number(
+  process.env.PORT ??
+  config.server?.port ??
+  3000
+);
+
+const NODE_ENV =
+  config.environment ??
+  process.env.NODE_ENV ??
+  'development';
+
+const SHUTDOWN_TIMEOUT_MS = Number(
+  config.server?.shutdownTimeoutMs ??
+  10000
+);
+
+
+/**
+ * ============================================================
+ * STARTUP LOGGER
+ * ============================================================
+ */
+
+function logStartup(message, metadata = {}) {
+  if (!app?.log) {
+    console.log(`[NEXUS] ${message}`, metadata);
+    return;
+  }
+
+  app.log.info(
+    {
+      ...metadata,
+      service: 'nexus-os',
+      environment: NODE_ENV,
+    },
+    message
+  );
+}
+
+
+/**
+ * ============================================================
+ * START APPLICATION
+ * ============================================================
  */
 
 async function startServer() {
-    try {
-        console.log('');
-        console.log('================================================');
-        console.log(` ${APP_NAME}`);
-        console.log(' Production Application Server');
-        console.log('================================================');
-        console.log(` Environment : ${NODE_ENV}`);
-        console.log(` Host        : ${HOST}`);
-        console.log(` Port        : ${PORT}`);
-        console.log('------------------------------------------------');
+  try {
+    /**
+     * --------------------------------------------------------
+     * 1. CREATE FASTIFY APPLICATION
+     * --------------------------------------------------------
+     */
 
-
-        /**
-         * ------------------------------------------------------------
-         * 1. DATABASE
-         * ------------------------------------------------------------
-         *
-         * The database must be available before accepting requests.
-         * This prevents users from reaching an application whose
-         * persistence layer has not initialized.
-         */
-
-        console.log('[NEXUS] Initializing database...');
-
-        await connectDatabase();
-
-        console.log('[NEXUS] Database initialization complete.');
-
-
-        /**
-         * ------------------------------------------------------------
-         * 2. HTTP SERVER
-         * ------------------------------------------------------------
-         */
-
-        server = http.createServer(app);
-
-
-        /**
-         * ------------------------------------------------------------
-         * 3. REALTIME SOCKET SERVER
-         * ------------------------------------------------------------
-         *
-         * Socket.IO is attached to the same HTTP server.
-         *
-         * This gives Nexus Connect a unified network layer:
-         *
-         *     HTTPS
-         *       │
-         *       ├── REST API
-         *       │
-         *       └── Socket.IO realtime
-         *
-         * Future features such as:
-         *
-         *     messaging
-         *     typing indicators
-         *     presence
-         *     read receipts
-         *     notifications
-         *     realtime group activity
-         *
-         * can use the same server.
-         */
-
-        console.log('[NEXUS] Initializing realtime communication...');
-
-        initializeSocketServer(server);
-
-        console.log('[NEXUS] Realtime communication initialized.');
-
-
-        /**
-         * ------------------------------------------------------------
-         * 4. SERVER LISTENER
-         * ------------------------------------------------------------
-         *
-         * Render provides PORT dynamically through the environment.
-         *
-         * HOST defaults to 0.0.0.0 so the application is reachable
-         * from outside the container/server.
-         */
-
-        await new Promise((resolve, reject) => {
-            server.once('error', reject);
-
-            server.listen(PORT, HOST, () => {
-                server.removeListener('error', reject);
-
-                resolve();
-            });
-        });
-
-
-        /**
-         * ------------------------------------------------------------
-         * 5. SERVER READY
-         * ------------------------------------------------------------
-         */
-
-        console.log('------------------------------------------------');
-        console.log('[NEXUS] Server is now running.');
-        console.log(`[NEXUS] Listening on ${HOST}:${PORT}`);
-        console.log(`[NEXUS] Environment: ${NODE_ENV}`);
-        console.log('================================================');
-        console.log('');
-    } catch (error) {
-        console.error('');
-        console.error('================================================');
-        console.error('[NEXUS] SERVER STARTUP FAILED');
-        console.error('================================================');
-        console.error(error);
-        console.error('================================================');
-        console.error('');
-
-        await shutdownServer('STARTUP_FAILURE');
-
-        process.exitCode = 1;
-    }
-}
-
-
-/**
- * ================================================================
- * GRACEFUL SHUTDOWN
- * ================================================================
- *
- * Cloud platforms can terminate application instances.
- *
- * We therefore close resources in an orderly manner:
- *
- *   1. Stop accepting new connections.
- *   2. Allow active HTTP connections to finish.
- *   3. Close Socket.IO connections.
- *   4. Disconnect MongoDB.
- *   5. Exit the process.
- *
- * This protects against:
- *
- *   - incomplete database operations
- *   - dropped realtime connections
- *   - corrupted application state
- *   - abrupt shutdowns
- * ================================================================
- */
-
-async function shutdownServer(signal = 'UNKNOWN') {
-    if (shuttingDown) {
-        return;
-    }
-
-    shuttingDown = true;
-
-    console.log('');
-    console.log(`[NEXUS] Shutdown requested: ${signal}`);
+    app = await buildApp();
 
 
     /**
-     * Hard shutdown protection.
+     * --------------------------------------------------------
+     * 2. DATABASE CONNECTION
+     * --------------------------------------------------------
      *
-     * If something hangs during shutdown, the process will still
-     * terminate after the configured safety period.
+     * Database initialization happens before the server begins
+     * accepting production traffic.
+     *
+     * This prevents the application from advertising itself as
+     * ready while its persistence layer is unavailable.
      */
 
-    const forceShutdownTimer = setTimeout(() => {
-        console.error(
-            '[NEXUS] Graceful shutdown timed out. Forcing process termination.'
-        );
-
-        process.exit(1);
-    }, SHUTDOWN_TIMEOUT_MS);
-
-    forceShutdownTimer.unref();
+    await connectDatabase();
 
 
-    try {
-        /**
-         * ------------------------------------------------------------
-         * HTTP SERVER
-         * ------------------------------------------------------------
-         */
+    /**
+     * --------------------------------------------------------
+     * 3. CREATE NODE HTTP SERVER
+     * --------------------------------------------------------
+     *
+     * Fastify manages the HTTP application while Node's HTTP
+     * server becomes the transport layer shared with Socket.IO.
+     */
 
-        if (server) {
-            console.log('[NEXUS] Closing HTTP server...');
-
-            await new Promise((resolve) => {
-                server.close(() => {
-                    console.log('[NEXUS] HTTP server closed.');
-                    resolve();
-                });
-            });
-        }
+    httpServer = http.createServer(
+      app.server
+    );
 
 
-        /**
-         * ------------------------------------------------------------
-         * DATABASE
-         * ------------------------------------------------------------
-         */
+    /**
+     * --------------------------------------------------------
+     * 4. CREATE SOCKET.IO SERVER
+     * --------------------------------------------------------
+     *
+     * Socket.IO is attached to the same HTTP server and therefore
+     * uses the same origin as the NEXUS web application.
+     *
+     * Browser:
+     *
+     *   https://nexus.example.com
+     *
+     * API:
+     *
+     *   https://nexus.example.com/api/...
+     *
+     * Socket:
+     *
+     *   https://nexus.example.com/socket.io/...
+     */
 
-        console.log('[NEXUS] Disconnecting database...');
+    io = new SocketIOServer(
+      httpServer,
+      {
+        path:
+          config.realtime?.path ??
+          '/socket.io',
 
-        await disconnectDatabase();
+        cors: {
+          origin:
+            config.security?.cors?.origin ??
+            true,
 
-        console.log('[NEXUS] Database disconnected.');
+          methods:
+            config.security?.cors?.methods ??
+            ['GET', 'POST'],
+
+          credentials:
+            config.security?.cors?.credentials ??
+            true,
+        },
+
+        transports:
+          config.realtime?.transports ??
+          ['websocket', 'polling'],
+
+        pingInterval:
+          config.realtime?.pingInterval ??
+          25000,
+
+        pingTimeout:
+          config.realtime?.pingTimeout ??
+          20000,
+
+        connectTimeout:
+          config.realtime?.connectTimeout ??
+          10000,
+
+        maxHttpBufferSize:
+          config.realtime?.maxHttpBufferSize ??
+          1_000_000,
+
+        serveClient: true,
+      }
+    );
 
 
-        clearTimeout(forceShutdownTimer);
+    /**
+     * --------------------------------------------------------
+     * 5. REGISTER REALTIME INFRASTRUCTURE
+     * --------------------------------------------------------
+     *
+     * sockets.js owns:
+     *
+     *   - authentication
+     *   - authorization
+     *   - user rooms
+     *   - presence
+     *   - conversations
+     *   - typing indicators
+     *   - notifications
+     *   - delivery events
+     *   - read receipts
+     *   - connection lifecycle
+     *
+     * server.js only supplies the Socket.IO instance.
+     */
 
-        console.log('[NEXUS] Shutdown completed successfully.');
-        console.log('');
+    await registerSocketServer(io);
 
-        process.exit(0);
-    } catch (error) {
-        clearTimeout(forceShutdownTimer);
 
-        console.error(
-            '[NEXUS] Error during graceful shutdown:',
-            error
-        );
+    /**
+     * --------------------------------------------------------
+     * 6. FASTIFY READY
+     * --------------------------------------------------------
+     *
+     * Ensures Fastify has completed plugin and route
+     * initialization before the server accepts requests.
+     */
 
-        process.exit(1);
-    }
+    await app.ready();
+
+
+    /**
+     * --------------------------------------------------------
+     * 7. START HTTP SERVER
+     * --------------------------------------------------------
+     *
+     * Render supplies PORT through process.env.PORT.
+     *
+     * We bind to 0.0.0.0 so the service is reachable from
+     * Render/container infrastructure.
+     */
+
+    await new Promise((resolve, reject) => {
+      httpServer.once('error', reject);
+
+      httpServer.listen(
+        {
+          host: HOST,
+          port: PORT,
+        },
+        resolve
+      );
+    });
+
+
+    /**
+     * --------------------------------------------------------
+     * 8. STARTUP INFORMATION
+     * --------------------------------------------------------
+     */
+
+    logStartup(
+      'NEXUS OS server started successfully.',
+      {
+        host: HOST,
+        port: PORT,
+        environment: NODE_ENV,
+        http: `http://${HOST}:${PORT}`,
+        health: '/health',
+        live: '/health/live',
+        ready: '/health/ready',
+        socket: '/socket.io',
+      }
+    );
+
+
+    /**
+     * --------------------------------------------------------
+     * 9. STARTUP EVENT
+     * --------------------------------------------------------
+     */
+
+    app.log.info(
+      {
+        event: 'server.started',
+        service: 'nexus-os',
+        environment: NODE_ENV,
+        port: PORT,
+      },
+      'NEXUS OS runtime is operational.'
+    );
+  } catch (error) {
+    /**
+     * Startup failures must never be silently swallowed.
+     */
+
+    console.error(
+      '[NEXUS] Fatal startup error:',
+      error
+    );
+
+    await forceCleanup();
+
+    process.exitCode = 1;
+  }
 }
 
 
 /**
- * ================================================================
+ * ============================================================
+ * GRACEFUL SHUTDOWN
+ * ============================================================
+ *
+ * Handles:
+ *
+ *   SIGTERM — Render/container/platform shutdown
+ *   SIGINT  — local Ctrl+C
+ *
+ * Shutdown sequence:
+ *
+ *   Stop accepting connections
+ *        ↓
+ *   Stop Socket.IO
+ *        ↓
+ *   Close Fastify
+ *        ↓
+ *   Disconnect database
+ *        ↓
+ *   Exit
+ * ============================================================
+ */
+
+async function gracefulShutdown(signal) {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+
+  const shutdownStartedAt = Date.now();
+
+  try {
+    app?.log?.info(
+      {
+        event: 'server.shutdown.started',
+        signal,
+      },
+      'NEXUS OS graceful shutdown initiated.'
+    );
+
+
+    /**
+     * --------------------------------------------------------
+     * STOP NEW HTTP CONNECTIONS
+     * --------------------------------------------------------
+     */
+
+    if (httpServer) {
+      httpServer.close();
+    }
+
+
+    /**
+     * --------------------------------------------------------
+     * STOP SOCKET.IO
+     * --------------------------------------------------------
+     */
+
+    if (io) {
+      await new Promise((resolve) => {
+        io.close(() => resolve());
+      });
+    }
+
+
+    /**
+     * --------------------------------------------------------
+     * CLOSE FASTIFY
+     * --------------------------------------------------------
+     */
+
+    if (app) {
+      await app.close();
+    }
+
+
+    /**
+     * --------------------------------------------------------
+     * DISCONNECT DATABASE
+     * --------------------------------------------------------
+     */
+
+    await disconnectDatabase();
+
+
+    /**
+     * --------------------------------------------------------
+     * SHUTDOWN COMPLETE
+     * --------------------------------------------------------
+     */
+
+    const duration =
+      Date.now() - shutdownStartedAt;
+
+    console.log(
+      `[NEXUS] Graceful shutdown completed in ${duration}ms.`
+    );
+
+    process.exitCode = 0;
+  } catch (error) {
+    console.error(
+      '[NEXUS] Error during graceful shutdown:',
+      error
+    );
+
+    process.exitCode = 1;
+  }
+}
+
+
+/**
+ * ============================================================
+ * FORCE CLEANUP
+ * ============================================================
+ *
+ * Used when startup itself fails.
+ */
+
+async function forceCleanup() {
+  try {
+    if (io) {
+      io.close();
+    }
+  } catch {
+    // Intentionally ignored during emergency cleanup.
+  }
+
+  try {
+    if (httpServer) {
+      httpServer.close();
+    }
+  } catch {
+    // Intentionally ignored during emergency cleanup.
+  }
+
+  try {
+    if (app) {
+      await app.close();
+    }
+  } catch {
+    // Intentionally ignored during emergency cleanup.
+  }
+
+  try {
+    await disconnectDatabase();
+  } catch {
+    // Intentionally ignored during emergency cleanup.
+  }
+}
+
+
+/**
+ * ============================================================
+ * SHUTDOWN TIMEOUT
+ * ============================================================
+ *
+ * A production service must not remain indefinitely stuck
+ * during deployment or restart.
+ */
+
+let shutdownTimer = null;
+
+function startShutdownTimer() {
+  if (shutdownTimer) {
+    clearTimeout(shutdownTimer);
+  }
+
+  shutdownTimer = setTimeout(() => {
+    console.error(
+      '[NEXUS] Graceful shutdown timed out. Forcing exit.'
+    );
+
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+
+  /**
+   * Do not keep Node alive solely because of this timer.
+   */
+  shutdownTimer.unref();
+}
+
+
+/**
+ * ============================================================
  * PROCESS SIGNALS
- * ================================================================
+ * ============================================================
  */
 
-process.on('SIGTERM', () => {
-    shutdownServer('SIGTERM');
-});
+process.on(
+  'SIGTERM',
+  async () => {
+    startShutdownTimer();
 
-process.on('SIGINT', () => {
-    shutdownServer('SIGINT');
-});
+    await gracefulShutdown('SIGTERM');
+  }
+);
+
+
+process.on(
+  'SIGINT',
+  async () => {
+    startShutdownTimer();
+
+    await gracefulShutdown('SIGINT');
+  }
+);
 
 
 /**
- * ================================================================
- * UNHANDLED ERRORS
- * ================================================================
+ * ============================================================
+ * UNHANDLED REJECTION
+ * ============================================================
  *
- * These should normally never occur because asynchronous operations
- * should be handled explicitly.
- *
- * However, the process must not silently continue in an unknown
- * state after a truly unexpected failure.
- * ================================================================
+ * An unhandled promise rejection can leave the application in
+ * an unknown state. We log it and initiate controlled shutdown.
  */
 
-process.on('uncaughtException', (error) => {
-    console.error('');
-    console.error('[NEXUS] UNCAUGHT EXCEPTION');
-    console.error(error);
+process.on(
+  'unhandledRejection',
+  async (reason) => {
+    console.error(
+      '[NEXUS] Unhandled promise rejection:',
+      reason
+    );
 
-    shutdownServer('UNCAUGHT_EXCEPTION');
-});
-
-
-process.on('unhandledRejection', (reason) => {
-    console.error('');
-    console.error('[NEXUS] UNHANDLED PROMISE REJECTION');
-    console.error(reason);
-
-    shutdownServer('UNHANDLED_REJECTION');
-});
+    if (!shuttingDown) {
+      await gracefulShutdown(
+        'unhandledRejection'
+      );
+    }
+  }
+);
 
 
 /**
- * ================================================================
- * APPLICATION START
- * ================================================================
+ * ============================================================
+ * UNCAUGHT EXCEPTION
+ * ============================================================
+ *
+ * After an uncaught exception, continuing to serve requests can
+ * be unsafe because application state may be corrupted.
  */
 
-startServer();
+process.on(
+  'uncaughtException',
+  async (error) => {
+    console.error(
+      '[NEXUS] Uncaught exception:',
+      error
+    );
+
+    if (!shuttingDown) {
+      await gracefulShutdown(
+        'uncaughtException'
+      );
+    }
+
+    process.exitCode = 1;
+  }
+);
+
+
+/**
+ * ============================================================
+ * START
+ * ============================================================
+ */
+
+await startServer();
