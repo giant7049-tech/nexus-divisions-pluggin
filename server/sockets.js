@@ -1,1539 +1,1689 @@
-'use strict';
-
 /**
- * NEXUS CONNECT
- * Real-Time Socket Layer
+ * NEXUS OS
+ * server/sockets.js
  *
- * File:
- *   server/sockets.js
+ * Real-time communication layer for NEXUS OS.
  *
- * Responsibility:
- *   - Socket.IO initialization
- *   - authenticated socket sessions
- *   - online/offline presence
- *   - conversation rooms
- *   - typing indicators
- *   - message delivery events
- *   - read receipts
- *   - message reactions
- *   - reconnection handling
- *   - secure event validation
+ * Responsibilities:
+ * - Socket.IO server configuration
+ * - authenticated socket connections
+ * - JWT authentication
+ * - user rooms
+ * - conversation rooms
+ * - online/offline presence
+ * - private events
+ * - messaging events
+ * - typing indicators
+ * - delivery/read receipts
+ * - notification events
+ * - system events
+ * - reconnect support
+ * - server-side authorization
+ * - rate protection for realtime actions
+ * - graceful Socket.IO shutdown
  *
- * Architecture:
- *   Client
- *      ↓
- *   Socket.IO
- *      ↓
- *   Socket authentication
- *      ↓
- *   Event validation
- *      ↓
- *   Service layer
- *      ↓
- *   Database
- *
- * This layer must NOT contain database business logic.
+ * This module intentionally contains realtime transport/orchestration.
+ * Business logic and persistence belong to services.js/models.js.
  */
 
-const jwt = require('jsonwebtoken');
+import { Server as SocketIOServer } from "socket.io";
+import jwt from "jsonwebtoken";
+import cookie from "cookie";
+import { randomUUID } from "node:crypto";
 
-const {
-    env,
-    security
-} = require('./config');
+/**
+ * ---------------------------------------------------------------
+ * CONSTANTS
+ * ---------------------------------------------------------------
+ */
 
-const {
-    getUserById,
-    getUserByUsername,
-    createMessage,
-    markMessagesAsRead,
-    updateUserPresence,
-    createNotification,
-    addReaction,
-    removeReaction
-} = require('./services');
+const SOCKET_VERSION = "1.0";
 
-
-/* -------------------------------------------------------------------------- */
-/* CONFIGURATION                                                              */
-/* -------------------------------------------------------------------------- */
+const DEFAULT_MAX_CONNECTIONS_PER_USER = 5;
 
 const SOCKET_EVENTS = Object.freeze({
+  CONNECTION_READY: "system:ready",
+  CONNECTION_ERROR: "system:error",
 
-    CONNECTION: 'connection',
-    DISCONNECT: 'disconnect',
+  PRESENCE_ONLINE: "presence:online",
+  PRESENCE_OFFLINE: "presence:offline",
+  PRESENCE_STATUS: "presence:status",
 
-    PRESENCE_UPDATE: 'presence:update',
-    PRESENCE_CHANGED: 'presence:changed',
+  MESSAGE_SEND: "message:send",
+  MESSAGE_SENT: "message:sent",
+  MESSAGE_RECEIVED: "message:received",
+  MESSAGE_DELIVERED: "message:delivered",
+  MESSAGE_READ: "message:read",
+  MESSAGE_DELETED: "message:deleted",
+  MESSAGE_UPDATED: "message:updated",
 
-    CONVERSATION_JOIN: 'conversation:join',
-    CONVERSATION_LEAVE: 'conversation:leave',
-    CONVERSATION_JOINED: 'conversation:joined',
-    CONVERSATION_LEFT: 'conversation:left',
+  CONVERSATION_JOIN: "conversation:join",
+  CONVERSATION_LEAVE: "conversation:leave",
+  CONVERSATION_UPDATED: "conversation:updated",
 
-    MESSAGE_SEND: 'message:send',
-    MESSAGE_NEW: 'message:new',
-    MESSAGE_ERROR: 'message:error',
+  TYPING_START: "typing:start",
+  TYPING_STOP: "typing:stop",
 
-    TYPING_START: 'typing:start',
-    TYPING_STOP: 'typing:stop',
-    TYPING_UPDATE: 'typing:update',
+  NOTIFICATION_NEW: "notification:new",
+  NOTIFICATION_READ: "notification:read",
+  NOTIFICATION_UPDATED: "notification:updated",
 
-    MESSAGE_READ: 'message:read',
-    MESSAGE_READ_UPDATE: 'message:read:update',
+  SYSTEM_EVENT: "system:event",
 
-    MESSAGE_REACTION_ADD: 'message:reaction:add',
-    MESSAGE_REACTION_REMOVE: 'message:reaction:remove',
-    MESSAGE_REACTION_UPDATE: 'message:reaction:update',
-
-    SOCKET_ERROR: 'socket:error',
-
-    SYSTEM_READY: 'system:ready'
+  CONNECTION_PING: "connection:ping",
+  CONNECTION_PONG: "connection:pong",
 });
 
-
-const SOCKET_ROOM_PREFIX = Object.freeze({
-    USER: 'user:',
-    CONVERSATION: 'conversation:',
-    COMMUNITY: 'community:'
-});
-
-
-/* -------------------------------------------------------------------------- */
-/* INTERNAL STATE                                                             */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Maps userId -> Set(socketId)
- *
- * One user may be logged in on:
- * - desktop
- * - mobile
- * - tablet
- * - another browser
- *
- * Therefore we must NOT assume one socket per user.
+ * ---------------------------------------------------------------
+ * UTILITY FUNCTIONS
+ * ---------------------------------------------------------------
  */
-const userSockets = new Map();
-
-
-/**
- * Maps socketId -> userId.
- *
- * Used for fast cleanup when a socket disconnects.
- */
-const socketUsers = new Map();
-
-
-/**
- * Tracks currently typing users.
- *
- * conversationId -> Set(userId)
- */
-const typingUsers = new Map();
-
-
-/* -------------------------------------------------------------------------- */
-/* UTILITY FUNCTIONS                                                          */
-/* -------------------------------------------------------------------------- */
 
 function normalizeId(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
 
-    if (
-        value === null ||
-        value === undefined
-    ) {
-        return null;
-    }
-
-    const normalized = String(value).trim();
-
-    return normalized || null;
+  return String(value);
 }
-
-
-function safeString(value, maxLength = 500) {
-
-    if (
-        value === null ||
-        value === undefined
-    ) {
-        return '';
-    }
-
-    return String(value)
-        .trim()
-        .slice(0, maxLength);
-}
-
 
 function getUserRoom(userId) {
-
-    return `${SOCKET_ROOM_PREFIX.USER}${userId}`;
+  return `user:${normalizeId(userId)}`;
 }
-
 
 function getConversationRoom(conversationId) {
-
-    return `${SOCKET_ROOM_PREFIX.CONVERSATION}${conversationId}`;
+  return `conversation:${normalizeId(conversationId)}`;
 }
 
-
-function getCommunityRoom(communityId) {
-
-    return `${SOCKET_ROOM_PREFIX.COMMUNITY}${communityId}`;
+function getPresenceRoom(userId) {
+  return `presence:${normalizeId(userId)}`;
 }
 
+function getSocketRequestId(socket) {
+  return socket.data?.requestId || randomUUID();
+}
+
+function createSocketError(code, message, details = undefined) {
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      ...(details ? { details } : {}),
+    },
+  };
+}
+
+function createSocketSuccess(data = {}) {
+  return {
+    ok: true,
+    ...data,
+  };
+}
 
 /**
- * Return true if a user currently has at least one connected socket.
- */
-function isUserOnline(userId) {
-
-    const sockets = userSockets.get(String(userId));
-
-    return Boolean(
-        sockets &&
-        sockets.size > 0
-    );
-}
-
-
-/**
- * Add socket to a user's socket collection.
- */
-function registerUserSocket(userId, socketId) {
-
-    const normalizedUserId = String(userId);
-
-    if (!userSockets.has(normalizedUserId)) {
-
-        userSockets.set(
-            normalizedUserId,
-            new Set()
-        );
-    }
-
-    userSockets
-        .get(normalizedUserId)
-        .add(socketId);
-
-    socketUsers.set(
-        socketId,
-        normalizedUserId
-    );
-}
-
-
-/**
- * Remove socket from user collection.
+ * Safely call a service method.
  *
- * Returns true when the user has completely gone offline.
+ * The service layer remains the owner of business logic.
+ * This helper prevents a missing optional service from crashing
+ * the entire realtime server.
  */
-function unregisterUserSocket(socketId) {
+async function callService(services, serviceName, methodName, ...args) {
+  const service = services?.[serviceName];
 
-    const userId = socketUsers.get(socketId);
+  if (!service || typeof service[methodName] !== "function") {
+    return null;
+  }
 
-    if (!userId) {
-        return null;
-    }
-
-    socketUsers.delete(socketId);
-
-    const sockets = userSockets.get(userId);
-
-    if (!sockets) {
-        return {
-            userId,
-            becameOffline: true
-        };
-    }
-
-    sockets.delete(socketId);
-
-    if (sockets.size === 0) {
-
-        userSockets.delete(userId);
-
-        return {
-            userId,
-            becameOffline: true
-        };
-    }
-
-    return {
-        userId,
-        becameOffline: false
-    };
+  return service[methodName](...args);
 }
-
 
 /**
- * Remove user from every typing state.
+ * ---------------------------------------------------------------
+ * JWT AUTHENTICATION
+ * ---------------------------------------------------------------
  */
-function clearTypingForUser(userId) {
 
-    const normalizedUserId = String(userId);
+function extractToken(socket) {
+  const authToken = socket.handshake?.auth?.token;
 
-    for (const [
-        conversationId,
-        users
-    ] of typingUsers.entries()) {
+  if (authToken && typeof authToken === "string") {
+    return authToken;
+  }
 
-        users.delete(normalizedUserId);
+  const authorization = socket.handshake?.headers?.authorization;
 
-        if (users.size === 0) {
+  if (
+    typeof authorization === "string" &&
+    authorization.toLowerCase().startsWith("bearer ")
+  ) {
+    return authorization.slice(7).trim();
+  }
 
-            typingUsers.delete(
-                conversationId
-            );
-        }
+  const cookieHeader = socket.handshake?.headers?.cookie;
+
+  if (typeof cookieHeader === "string") {
+    try {
+      const cookies = cookie.parse(cookieHeader);
+
+      const cookieToken =
+        cookies.accessToken ||
+        cookies.access_token ||
+        cookies.nexus_access_token;
+
+      if (cookieToken) {
+        return cookieToken;
+      }
+    } catch {
+      return null;
     }
+  }
+
+  return null;
 }
 
+function authenticateSocket(socket, config) {
+  const token = extractToken(socket);
+
+  if (!token) {
+    throw new Error("AUTHENTICATION_REQUIRED");
+  }
+
+  const secret =
+    config?.security?.jwtSecret ||
+    config?.jwtSecret ||
+    process.env.JWT_SECRET;
+
+  if (!secret) {
+    throw new Error("JWT_SECRET_NOT_CONFIGURED");
+  }
+
+  const issuer =
+    config?.security?.jwtIssuer ||
+    config?.jwtIssuer ||
+    process.env.JWT_ISSUER;
+
+  const audience =
+    config?.security?.jwtAudience ||
+    config?.jwtAudience ||
+    process.env.JWT_AUDIENCE;
+
+  const verifyOptions = {};
+
+  if (issuer) {
+    verifyOptions.issuer = issuer;
+  }
+
+  if (audience) {
+    verifyOptions.audience = audience;
+  }
+
+  const payload = jwt.verify(token, secret, verifyOptions);
+
+  const userId =
+    payload.sub ||
+    payload.userId ||
+    payload.id;
+
+  if (!userId) {
+    throw new Error("INVALID_TOKEN_SUBJECT");
+  }
+
+  return {
+    id: normalizeId(userId),
+    role: payload.role || "user",
+    roles: Array.isArray(payload.roles)
+      ? payload.roles
+      : payload.role
+        ? [payload.role]
+        : ["user"],
+    sessionId:
+      payload.sessionId ||
+      payload.sid ||
+      null,
+    tokenIssuedAt: payload.iat || null,
+    tokenExpiresAt: payload.exp || null,
+  };
+}
 
 /**
- * Validate an object payload.
+ * ---------------------------------------------------------------
+ * SOCKET AUTH MIDDLEWARE
+ * ---------------------------------------------------------------
  */
-function ensureObject(payload) {
 
-    return Boolean(
-        payload &&
-        typeof payload === 'object' &&
-        !Array.isArray(payload)
-    );
+function createAuthenticationMiddleware(config, logger) {
+  return async (socket, next) => {
+    try {
+      const user = authenticateSocket(socket, config);
+
+      socket.data.user = user;
+      socket.data.authenticated = true;
+      socket.data.requestId = randomUUID();
+      socket.data.connectedAt = new Date();
+
+      next();
+    } catch (error) {
+      const code = error?.message || "SOCKET_AUTHENTICATION_FAILED";
+
+      logger?.warn?.(
+        {
+          socketId: socket.id,
+          error: code,
+        },
+        "Socket authentication failed",
+      );
+
+      const authError = new Error(
+        code === "AUTHENTICATION_REQUIRED"
+          ? "Authentication required."
+          : "Realtime authentication failed.",
+      );
+
+      authError.data = {
+        code,
+        requestId: randomUUID(),
+      };
+
+      next(authError);
+    }
+  };
 }
-
 
 /**
- * Emit an application-level socket error.
+ * ---------------------------------------------------------------
+ * CONNECTION LIMITING
+ * ---------------------------------------------------------------
  */
-function emitSocketError(
-    socket,
-    code,
-    message,
-    details = null
-) {
 
-    socket.emit(
-        SOCKET_EVENTS.SOCKET_ERROR,
-        {
-            success: false,
-            code,
-            message,
-            details,
-            timestamp: new Date().toISOString()
-        }
-    );
+function createConnectionLimiter(maxConnectionsPerUser) {
+  const connections = new Map();
+
+  return {
+    add(userId, socketId) {
+      const id = normalizeId(userId);
+
+      if (!connections.has(id)) {
+        connections.set(id, new Set());
+      }
+
+      const sockets = connections.get(id);
+
+      if (sockets.size >= maxConnectionsPerUser) {
+        return false;
+      }
+
+      sockets.add(socketId);
+
+      return true;
+    },
+
+    remove(userId, socketId) {
+      const id = normalizeId(userId);
+      const sockets = connections.get(id);
+
+      if (!sockets) {
+        return;
+      }
+
+      sockets.delete(socketId);
+
+      if (sockets.size === 0) {
+        connections.delete(id);
+      }
+    },
+
+    count(userId) {
+      return connections.get(normalizeId(userId))?.size || 0;
+    },
+
+    isOnline(userId) {
+      return this.count(userId) > 0;
+    },
+  };
 }
-
-
-/* -------------------------------------------------------------------------- */
-/* SOCKET AUTHENTICATION                                                      */
-/* -------------------------------------------------------------------------- */
 
 /**
- * Authenticate Socket.IO connections using the same JWT system
- * used by the REST API.
- *
- * Expected client connection:
- *
- * io(API_URL, {
- *     auth: {
- *         token: JWT_TOKEN
- *     }
- * });
+ * ---------------------------------------------------------------
+ * REALTIME STATE
+ * ---------------------------------------------------------------
  */
-async function authenticateSocket(socket) {
 
-    const auth = socket.handshake?.auth || {};
-
-    let token =
-        auth.token ||
-        socket.handshake?.headers?.authorization;
-
-    if (!token) {
-
-        throw new Error(
-            'Authentication token is required.'
-        );
-    }
-
-
-    if (
-        typeof token === 'string' &&
-        token.toLowerCase().startsWith('bearer ')
-    ) {
-
-        token = token.slice(7).trim();
-    }
-
-
-    if (!token) {
-
-        throw new Error(
-            'Invalid authentication token.'
-        );
-    }
-
-
-    const decoded = jwt.verify(
-        token,
-        env.JWT_SECRET,
-        {
-            algorithms: security.jwtAlgorithms
-        }
-    );
-
-
-    if (!decoded || !decoded.sub) {
-
-        throw new Error(
-            'Invalid authentication payload.'
-        );
-    }
-
-
-    const user = await getUserById(
-        decoded.sub
-    );
-
-
-    if (!user) {
-
-        throw new Error(
-            'User account could not be found.'
-        );
-    }
-
-
-    return {
-        id: String(user.id),
-        username: user.username,
-        displayName: user.displayName,
-        email: user.email
-    };
+function createRealtimeState() {
+  return {
+    connectedAt: new Date(),
+    connections: new Map(),
+    conversationMembers: new Map(),
+  };
 }
 
+/**
+ * ---------------------------------------------------------------
+ * AUTHORISATION
+ * ---------------------------------------------------------------
+ */
 
-/* -------------------------------------------------------------------------- */
-/* CONNECTION ROOMS                                                           */
-/* -------------------------------------------------------------------------- */
+function hasRole(socket, roles = []) {
+  const userRoles = socket.data?.user?.roles || [];
 
-async function joinConversation(
-    socket,
-    conversationId
+  return roles.some((role) => userRoles.includes(role));
+}
+
+function requireAuthenticated(socket) {
+  if (!socket.data?.authenticated || !socket.data?.user?.id) {
+    throw new Error("AUTHENTICATION_REQUIRED");
+  }
+}
+
+async function authorizeConversation(
+  socket,
+  conversationId,
+  services,
 ) {
+  requireAuthenticated(socket);
 
-    const normalizedConversationId =
-        normalizeId(conversationId);
+  if (!conversationId) {
+    throw new Error("CONVERSATION_ID_REQUIRED");
+  }
 
-    if (!normalizedConversationId) {
+  /**
+   * The service layer should perform the authoritative check.
+   *
+   * Example:
+   * ConversationService.canAccessConversation(userId, conversationId)
+   */
+  const result = await callService(
+    services,
+    "conversationService",
+    "canAccessConversation",
+    socket.data.user.id,
+    conversationId,
+  );
 
-        emitSocketError(
-            socket,
-            'INVALID_CONVERSATION',
-            'A valid conversation ID is required.'
-        );
+  /**
+   * If the service exists, its decision is authoritative.
+   */
+  if (result !== null) {
+    return Boolean(result);
+  }
 
-        return;
-    }
-
-
-    const room =
-        getConversationRoom(
-            normalizedConversationId
-        );
-
-
-    await socket.join(room);
-
-
-    socket.emit(
-        SOCKET_EVENTS.CONVERSATION_JOINED,
-        {
-            conversationId:
-                normalizedConversationId,
-
-            room,
-
-            timestamp:
-                new Date().toISOString()
-        }
-    );
+  /**
+   * Until the service layer is connected, do not grant access
+   * merely because the client supplied a conversation ID.
+   */
+  return false;
 }
 
+/**
+ * ---------------------------------------------------------------
+ * PRESENCE
+ * ---------------------------------------------------------------
+ */
 
-async function leaveConversation(
-    socket,
-    conversationId
+async function handlePresenceOnline(socket, services, logger) {
+  const userId = socket.data.user.id;
+
+  await callService(
+    services,
+    "presenceService",
+    "setOnline",
+    userId,
+    {
+      socketId: socket.id,
+      connectedAt: socket.data.connectedAt,
+    },
+  );
+
+  socket.join(getUserRoom(userId));
+  socket.join(getPresenceRoom(userId));
+
+  logger?.debug?.(
+    {
+      userId,
+      socketId: socket.id,
+    },
+    "User joined realtime presence",
+  );
+
+  socket.broadcast.emit(SOCKET_EVENTS.PRESENCE_ONLINE, {
+    userId,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+async function handlePresenceOffline(
+  socket,
+  services,
+  connectionLimiter,
+  logger,
 ) {
+  const userId = socket.data?.user?.id;
 
-    const normalizedConversationId =
-        normalizeId(conversationId);
+  if (!userId) {
+    return;
+  }
 
-    if (!normalizedConversationId) {
-        return;
-    }
+  const remainingConnections =
+    connectionLimiter.count(userId);
 
-
-    const room =
-        getConversationRoom(
-            normalizedConversationId
-        );
-
-
-    await socket.leave(room);
-
-
-    socket.emit(
-        SOCKET_EVENTS.CONVERSATION_LEFT,
-        {
-            conversationId:
-                normalizedConversationId,
-
-            room,
-
-            timestamp:
-                new Date().toISOString()
-        }
+  /**
+   * Only mark the user offline after their final socket
+   * connection has disappeared.
+   */
+  if (remainingConnections === 0) {
+    await callService(
+      services,
+      "presenceService",
+      "setOffline",
+      userId,
+      {
+        disconnectedAt: new Date(),
+      },
     );
+
+    socket.broadcast.emit(SOCKET_EVENTS.PRESENCE_OFFLINE, {
+      userId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  logger?.debug?.(
+    {
+      userId,
+      socketId: socket.id,
+      remainingConnections,
+    },
+    "Realtime presence disconnected",
+  );
 }
 
+/**
+ * ---------------------------------------------------------------
+ * CONVERSATIONS
+ * ---------------------------------------------------------------
+ */
 
-/* -------------------------------------------------------------------------- */
-/* PRESENCE                                                                   */
-/* -------------------------------------------------------------------------- */
-
-async function handlePresenceUpdate(
-    io,
-    socket,
-    payload
+async function handleConversationJoin(
+  socket,
+  payload,
+  services,
 ) {
+  requireAuthenticated(socket);
 
-    if (!ensureObject(payload)) {
+  const conversationId =
+    normalizeId(payload?.conversationId);
 
-        emitSocketError(
-            socket,
-            'INVALID_PRESENCE',
-            'Invalid presence payload.'
-        );
-
-        return;
-    }
-
-
-    const allowedStatuses = new Set([
-        'online',
-        'away',
-        'dnd',
-        'offline'
-    ]);
-
-
-    const status =
-        safeString(
-            payload.status,
-            30
-        ).toLowerCase();
-
-
-    if (!allowedStatuses.has(status)) {
-
-        emitSocketError(
-            socket,
-            'INVALID_STATUS',
-            'Invalid presence status.'
-        );
-
-        return;
-    }
-
-
-    const customStatus =
-        safeString(
-            payload.customStatus,
-            120
-        );
-
-
-    await updateUserPresence(
-        socket.user.id,
-        {
-            status,
-            customStatus
-        }
+  if (!conversationId) {
+    return createSocketError(
+      "CONVERSATION_ID_REQUIRED",
+      "A conversation ID is required.",
     );
+  }
 
-
-    const event = {
-        userId: socket.user.id,
-        username: socket.user.username,
-        status,
-        customStatus,
-        online: status !== 'offline',
-        timestamp: new Date().toISOString()
-    };
-
-
-    io.emit(
-        SOCKET_EVENTS.PRESENCE_CHANGED,
-        event
-    );
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* TYPING INDICATORS                                                          */
-/* -------------------------------------------------------------------------- */
-
-async function handleTypingStart(
-    io,
+  const authorized = await authorizeConversation(
     socket,
-    payload
-) {
+    conversationId,
+    services,
+  );
 
-    if (!ensureObject(payload)) {
-        return;
-    }
-
-
-    const conversationId =
-        normalizeId(
-            payload.conversationId
-        );
-
-
-    if (!conversationId) {
-        return;
-    }
-
-
-    if (!typingUsers.has(conversationId)) {
-
-        typingUsers.set(
-            conversationId,
-            new Set()
-        );
-    }
-
-
-    typingUsers
-        .get(conversationId)
-        .add(socket.user.id);
-
-
-    socket.join(
-        getConversationRoom(
-            conversationId
-        )
+  if (!authorized) {
+    return createSocketError(
+      "FORBIDDEN",
+      "You are not authorized to access this conversation.",
     );
+  }
 
+  const room = getConversationRoom(conversationId);
 
-    socket.to(
-        getConversationRoom(
-            conversationId
-        )
-    ).emit(
-        SOCKET_EVENTS.TYPING_UPDATE,
-        {
-            conversationId,
-            userId: socket.user.id,
-            username: socket.user.username,
-            typing: true,
-            timestamp: new Date().toISOString()
-        }
-    );
+  socket.join(room);
+
+  if (!services?.conversationService) {
+    return createSocketSuccess({
+      conversationId,
+      joined: true,
+    });
+  }
+
+  return createSocketSuccess({
+    conversationId,
+    joined: true,
+  });
 }
 
-
-async function handleTypingStop(
-    io,
-    socket,
-    payload
+async function handleConversationLeave(
+  socket,
+  payload,
 ) {
+  requireAuthenticated(socket);
 
-    if (!ensureObject(payload)) {
-        return;
-    }
+  const conversationId =
+    normalizeId(payload?.conversationId);
 
-
-    const conversationId =
-        normalizeId(
-            payload.conversationId
-        );
-
-
-    if (!conversationId) {
-        return;
-    }
-
-
-    const users =
-        typingUsers.get(
-            conversationId
-        );
-
-
-    if (users) {
-
-        users.delete(
-            socket.user.id
-        );
-
-
-        if (users.size === 0) {
-
-            typingUsers.delete(
-                conversationId
-            );
-        }
-    }
-
-
-    socket.to(
-        getConversationRoom(
-            conversationId
-        )
-    ).emit(
-        SOCKET_EVENTS.TYPING_UPDATE,
-        {
-            conversationId,
-            userId: socket.user.id,
-            username: socket.user.username,
-            typing: false,
-            timestamp: new Date().toISOString()
-        }
+  if (!conversationId) {
+    return createSocketError(
+      "CONVERSATION_ID_REQUIRED",
+      "A conversation ID is required.",
     );
+  }
+
+  socket.leave(
+    getConversationRoom(conversationId),
+  );
+
+  return createSocketSuccess({
+    conversationId,
+    joined: false,
+  });
 }
 
-
-/* -------------------------------------------------------------------------- */
-/* MESSAGE HANDLING                                                           */
-/* -------------------------------------------------------------------------- */
+/**
+ * ---------------------------------------------------------------
+ * MESSAGES
+ * ---------------------------------------------------------------
+ */
 
 async function handleMessageSend(
-    io,
-    socket,
-    payload
+  io,
+  socket,
+  payload,
+  services,
+  logger,
 ) {
-
-    try {
-
-        if (!ensureObject(payload)) {
-
-            emitSocketError(
-                socket,
-                'INVALID_MESSAGE',
-                'Invalid message payload.'
-            );
-
-            return;
-        }
-
-
-        const conversationId =
-            normalizeId(
-                payload.conversationId
-            );
-
-
-        const content =
-            safeString(
-                payload.content,
-                10000
-            );
-
-
-        if (!conversationId) {
-
-            emitSocketError(
-                socket,
-                'MISSING_CONVERSATION',
-                'Conversation ID is required.'
-            );
-
-            return;
-        }
-
-
-        if (!content) {
-
-            emitSocketError(
-                socket,
-                'EMPTY_MESSAGE',
-                'Message content cannot be empty.'
-            );
-
-            return;
-        }
-
-
-        /**
-         * Message creation is delegated to the service layer.
-         */
-        const message =
-            await createMessage({
-                conversationId,
-                senderId: socket.user.id,
-                content,
-                type:
-                    safeString(
-                        payload.type,
-                        30
-                    ) || 'text',
-
-                replyTo:
-                    normalizeId(
-                        payload.replyTo
-                    ),
-
-                metadata:
-                    ensureObject(
-                        payload.metadata
-                    )
-                        ? payload.metadata
-                        : {}
-            });
-
-
-        const eventPayload = {
-            message,
-            conversationId,
-            sender: {
-                id: socket.user.id,
-                username: socket.user.username,
-                displayName: socket.user.displayName
-            },
-            timestamp: new Date().toISOString()
-        };
-
-
-        io.to(
-            getConversationRoom(
-                conversationId
-            )
-        ).emit(
-            SOCKET_EVENTS.MESSAGE_NEW,
-            eventPayload
-        );
-
-
-        /**
-         * Also notify recipient devices through their user room
-         * when necessary.
-         */
-        const recipientUserIds =
-            Array.isArray(
-                message?.recipientUserIds
-            )
-                ? message.recipientUserIds
-                : [];
-
-
-        for (const recipientId of recipientUserIds) {
-
-            if (
-                String(recipientId) ===
-                String(socket.user.id)
-            ) {
-                continue;
-            }
-
-
-            io.to(
-                getUserRoom(
-                    recipientId
-                )
-            ).emit(
-                SOCKET_EVENTS.MESSAGE_NEW,
-                eventPayload
-            );
-        }
-
-    } catch (error) {
-
-        console.error(
-            '[NEXUS SOCKET] Message error:',
-            error
-        );
-
-
-        socket.emit(
-            SOCKET_EVENTS.MESSAGE_ERROR,
-            {
-                success: false,
-                code: 'MESSAGE_SEND_FAILED',
-                message:
-                    'The message could not be sent.',
-                timestamp:
-                    new Date().toISOString()
-            }
-        );
-    }
-}
-
-
-/* -------------------------------------------------------------------------- */
-/* READ RECEIPTS                                                              */
-/* -------------------------------------------------------------------------- */
-
-async function handleMessageRead(
-    io,
-    socket,
-    payload
-) {
-
-    if (!ensureObject(payload)) {
-        return;
-    }
-
+  try {
+    requireAuthenticated(socket);
 
     const conversationId =
-        normalizeId(
-            payload.conversationId
-        );
+      normalizeId(payload?.conversationId);
 
+    const content =
+      typeof payload?.content === "string"
+        ? payload.content.trim()
+        : "";
 
     if (!conversationId) {
-        return;
+      return createSocketError(
+        "CONVERSATION_ID_REQUIRED",
+        "A conversation ID is required.",
+      );
     }
 
-
-    const messageIds =
-        Array.isArray(
-            payload.messageIds
-        )
-            ? payload.messageIds
-                .map(normalizeId)
-                .filter(Boolean)
-                .slice(0, 100)
-            : [];
-
-
-    if (messageIds.length === 0) {
-        return;
+    if (!content) {
+      return createSocketError(
+        "MESSAGE_CONTENT_REQUIRED",
+        "Message content cannot be empty.",
+      );
     }
 
+    if (content.length > 10_000) {
+      return createSocketError(
+        "MESSAGE_TOO_LARGE",
+        "Message exceeds the maximum permitted length.",
+      );
+    }
 
-    await markMessagesAsRead(
-        socket.user.id,
-        conversationId,
-        messageIds
+    const authorized = await authorizeConversation(
+      socket,
+      conversationId,
+      services,
     );
 
+    if (!authorized) {
+      return createSocketError(
+        "FORBIDDEN",
+        "You are not authorized to send messages to this conversation.",
+      );
+    }
 
-    const event = {
-        conversationId,
-        messageIds,
-        userId: socket.user.id,
-        readAt: new Date().toISOString()
+    const clientMessageId =
+      normalizeId(payload?.clientMessageId) ||
+      randomUUID();
+
+    /**
+     * Persistence must happen through the service layer.
+     */
+    const message =
+      await callService(
+        services,
+        "messageService",
+        "createMessage",
+        {
+          conversationId,
+          senderId: socket.data.user.id,
+          content,
+          clientMessageId,
+          metadata:
+            payload?.metadata &&
+            typeof payload.metadata === "object"
+              ? payload.metadata
+              : {},
+        },
+      );
+
+    if (!message) {
+      logger?.error?.(
+        {
+          socketId: socket.id,
+          conversationId,
+          userId: socket.data.user.id,
+        },
+        "Message service unavailable",
+      );
+
+      return createSocketError(
+        "MESSAGE_SERVICE_UNAVAILABLE",
+        "The messaging service is temporarily unavailable.",
+      );
+    }
+
+    const eventPayload = {
+      message,
+      requestId: getSocketRequestId(socket),
+      timestamp: new Date().toISOString(),
     };
 
-
     io.to(
-        getConversationRoom(
-            conversationId
-        )
+      getConversationRoom(conversationId),
     ).emit(
-        SOCKET_EVENTS.MESSAGE_READ_UPDATE,
-        event
+      SOCKET_EVENTS.MESSAGE_RECEIVED,
+      eventPayload,
     );
+
+    socket.emit(
+      SOCKET_EVENTS.MESSAGE_SENT,
+      eventPayload,
+    );
+
+    return createSocketSuccess({
+      message,
+    });
+  } catch (error) {
+    logger?.error?.(
+      {
+        err: error,
+        socketId: socket.id,
+      },
+      "Realtime message send failed",
+    );
+
+    return createSocketError(
+      "MESSAGE_SEND_FAILED",
+      "Unable to send the message.",
+    );
+  }
 }
 
+/**
+ * ---------------------------------------------------------------
+ * DELIVERY RECEIPTS
+ * ---------------------------------------------------------------
+ */
 
-/* -------------------------------------------------------------------------- */
-/* MESSAGE REACTIONS                                                          */
-/* -------------------------------------------------------------------------- */
-
-async function handleReactionAdd(
-    io,
-    socket,
-    payload
+async function handleMessageDelivered(
+  io,
+  socket,
+  payload,
+  services,
 ) {
-
-    if (!ensureObject(payload)) {
-        return;
-    }
-
+  try {
+    requireAuthenticated(socket);
 
     const messageId =
-        normalizeId(
-            payload.messageId
-        );
-
-
-    const reaction =
-        safeString(
-            payload.reaction,
-            30
-        );
-
-
-    if (
-        !messageId ||
-        !reaction
-    ) {
-        return;
-    }
-
-
-    const result =
-        await addReaction(
-            messageId,
-            socket.user.id,
-            reaction
-        );
-
-
-    if (!result) {
-        return;
-    }
-
+      normalizeId(payload?.messageId);
 
     const conversationId =
-        normalizeId(
-            result.conversationId
-        );
+      normalizeId(payload?.conversationId);
 
-
-    if (!conversationId) {
-        return;
+    if (!messageId || !conversationId) {
+      return createSocketError(
+        "INVALID_RECEIPT",
+        "Message ID and conversation ID are required.",
+      );
     }
 
+    const authorized =
+      await authorizeConversation(
+        socket,
+        conversationId,
+        services,
+      );
+
+    if (!authorized) {
+      return createSocketError(
+        "FORBIDDEN",
+        "You are not authorized to update this message.",
+      );
+    }
+
+    const receipt =
+      await callService(
+        services,
+        "messageService",
+        "markDelivered",
+        {
+          messageId,
+          conversationId,
+          userId: socket.data.user.id,
+        },
+      );
+
+    if (!receipt) {
+      return createSocketError(
+        "MESSAGE_SERVICE_UNAVAILABLE",
+        "The messaging service is temporarily unavailable.",
+      );
+    }
 
     io.to(
-        getConversationRoom(
-            conversationId
-        )
+      getConversationRoom(conversationId),
     ).emit(
-        SOCKET_EVENTS.MESSAGE_REACTION_UPDATE,
-        {
-            action: 'add',
-            messageId,
-            userId: socket.user.id,
-            username: socket.user.username,
-            reaction,
-            conversationId,
-            timestamp: new Date().toISOString()
-        }
+      SOCKET_EVENTS.MESSAGE_DELIVERED,
+      {
+        messageId,
+        conversationId,
+        receipt,
+        userId: socket.data.user.id,
+        timestamp: new Date().toISOString(),
+      },
     );
+
+    return createSocketSuccess({
+      receipt,
+    });
+  } catch {
+    return createSocketError(
+      "DELIVERY_UPDATE_FAILED",
+      "Unable to update message delivery status.",
+    );
+  }
 }
 
+/**
+ * ---------------------------------------------------------------
+ * READ RECEIPTS
+ * ---------------------------------------------------------------
+ */
 
-async function handleReactionRemove(
-    io,
-    socket,
-    payload
+async function handleMessageRead(
+  io,
+  socket,
+  payload,
+  services,
 ) {
-
-    if (!ensureObject(payload)) {
-        return;
-    }
-
+  try {
+    requireAuthenticated(socket);
 
     const messageId =
-        normalizeId(
-            payload.messageId
-        );
-
-
-    const reaction =
-        safeString(
-            payload.reaction,
-            30
-        );
-
-
-    if (
-        !messageId ||
-        !reaction
-    ) {
-        return;
-    }
-
-
-    const result =
-        await removeReaction(
-            messageId,
-            socket.user.id,
-            reaction
-        );
-
-
-    if (!result) {
-        return;
-    }
-
+      normalizeId(payload?.messageId);
 
     const conversationId =
-        normalizeId(
-            result.conversationId
-        );
+      normalizeId(payload?.conversationId);
 
-
-    if (!conversationId) {
-        return;
+    if (!messageId || !conversationId) {
+      return createSocketError(
+        "INVALID_READ_RECEIPT",
+        "Message ID and conversation ID are required.",
+      );
     }
 
+    const authorized =
+      await authorizeConversation(
+        socket,
+        conversationId,
+        services,
+      );
+
+    if (!authorized) {
+      return createSocketError(
+        "FORBIDDEN",
+        "You are not authorized to update this message.",
+      );
+    }
+
+    const receipt =
+      await callService(
+        services,
+        "messageService",
+        "markRead",
+        {
+          messageId,
+          conversationId,
+          userId: socket.data.user.id,
+        },
+      );
+
+    if (!receipt) {
+      return createSocketError(
+        "MESSAGE_SERVICE_UNAVAILABLE",
+        "The messaging service is temporarily unavailable.",
+      );
+    }
 
     io.to(
-        getConversationRoom(
-            conversationId
-        )
+      getConversationRoom(conversationId),
     ).emit(
-        SOCKET_EVENTS.MESSAGE_REACTION_UPDATE,
-        {
-            action: 'remove',
-            messageId,
-            userId: socket.user.id,
-            username: socket.user.username,
-            reaction,
-            conversationId,
-            timestamp: new Date().toISOString()
-        }
+      SOCKET_EVENTS.MESSAGE_READ,
+      {
+        messageId,
+        conversationId,
+        receipt,
+        userId: socket.data.user.id,
+        timestamp: new Date().toISOString(),
+      },
     );
+
+    return createSocketSuccess({
+      receipt,
+    });
+  } catch {
+    return createSocketError(
+      "READ_RECEIPT_FAILED",
+      "Unable to update read status.",
+    );
+  }
 }
 
+/**
+ * ---------------------------------------------------------------
+ * TYPING INDICATORS
+ * ---------------------------------------------------------------
+ */
 
-/* -------------------------------------------------------------------------- */
-/* SOCKET INITIALIZATION                                                      */
-/* -------------------------------------------------------------------------- */
+async function handleTyping(
+  io,
+  socket,
+  payload,
+  services,
+  event,
+) {
+  try {
+    requireAuthenticated(socket);
 
-function initializeSockets(io) {
+    const conversationId =
+      normalizeId(payload?.conversationId);
 
-    if (!io) {
-
-        throw new Error(
-            'Socket.IO instance is required.'
-        );
+    if (!conversationId) {
+      return createSocketError(
+        "CONVERSATION_ID_REQUIRED",
+        "A conversation ID is required.",
+      );
     }
 
+    const authorized =
+      await authorizeConversation(
+        socket,
+        conversationId,
+        services,
+      );
 
-    /**
-     * Authentication middleware.
-     */
-    io.use(
-        async (socket, next) => {
+    if (!authorized) {
+      return createSocketError(
+        "FORBIDDEN",
+        "You are not authorized to access this conversation.",
+      );
+    }
 
-            try {
+    socket.to(
+      getConversationRoom(conversationId),
+    ).emit(event, {
+      conversationId,
+      userId: socket.data.user.id,
+      timestamp: new Date().toISOString(),
+    });
 
-                const user =
-                    await authenticateSocket(
-                        socket
-                    );
-
-
-                socket.user = user;
-
-
-                next();
-
-            } catch (error) {
-
-                console.error(
-                    '[NEXUS SOCKET] Authentication failed:',
-                    error.message
-                );
-
-
-                next(
-                    new Error(
-                        'Socket authentication failed.'
-                    )
-                );
-            }
-        }
+    return createSocketSuccess({
+      conversationId,
+    });
+  } catch {
+    return createSocketError(
+      "TYPING_EVENT_FAILED",
+      "Unable to process typing event.",
     );
-
-
-    /**
-     * Main connection handler.
-     */
-    io.on(
-        SOCKET_EVENTS.CONNECTION,
-        async (socket) => {
-
-            const user =
-                socket.user;
-
-
-            console.log(
-                `[NEXUS SOCKET] Connected: ${user.username} (${socket.id})`
-            );
-
-
-            registerUserSocket(
-                user.id,
-                socket.id
-            );
-
-
-            /**
-             * Every authenticated socket joins its personal room.
-             */
-            await socket.join(
-                getUserRoom(
-                    user.id
-                )
-            );
-
-
-            /**
-             * Initial online presence.
-             */
-            const wasAlreadyOnline =
-                isUserOnline(
-                    user.id
-                );
-
-
-            await updateUserPresence(
-                user.id,
-                {
-                    status: 'online'
-                }
-            );
-
-
-            if (!wasAlreadyOnline) {
-
-                io.emit(
-                    SOCKET_EVENTS.PRESENCE_CHANGED,
-                    {
-                        userId: user.id,
-                        username: user.username,
-                        status: 'online',
-                        online: true,
-                        timestamp:
-                            new Date().toISOString()
-                    }
-                );
-            }
-
-
-            socket.emit(
-                SOCKET_EVENTS.SYSTEM_READY,
-                {
-                    success: true,
-                    user: {
-                        id: user.id,
-                        username: user.username,
-                        displayName:
-                            user.displayName
-                    },
-                    timestamp:
-                        new Date().toISOString()
-                }
-            );
-
-
-            /* ------------------------------------------------------------------ */
-            /* CONVERSATION EVENTS                                               */
-            /* ------------------------------------------------------------------ */
-
-            socket.on(
-                SOCKET_EVENTS.CONVERSATION_JOIN,
-                async (payload) => {
-
-                    try {
-
-                        const conversationId =
-                            ensureObject(payload)
-                                ? payload.conversationId
-                                : payload;
-
-
-                        await joinConversation(
-                            socket,
-                            conversationId
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            '[NEXUS SOCKET] Join conversation error:',
-                            error
-                        );
-
-
-                        emitSocketError(
-                            socket,
-                            'CONVERSATION_JOIN_FAILED',
-                            'Unable to join conversation.'
-                        );
-                    }
-                }
-            );
-
-
-            socket.on(
-                SOCKET_EVENTS.CONVERSATION_LEAVE,
-                async (payload) => {
-
-                    try {
-
-                        const conversationId =
-                            ensureObject(payload)
-                                ? payload.conversationId
-                                : payload;
-
-
-                        await leaveConversation(
-                            socket,
-                            conversationId
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            '[NEXUS SOCKET] Leave conversation error:',
-                            error
-                        );
-                    }
-                }
-            );
-
-
-            /* ------------------------------------------------------------------ */
-            /* MESSAGES                                                           */
-            /* ------------------------------------------------------------------ */
-
-            socket.on(
-                SOCKET_EVENTS.MESSAGE_SEND,
-                async (payload) => {
-
-                    await handleMessageSend(
-                        io,
-                        socket,
-                        payload
-                    );
-                }
-            );
-
-
-            /* ------------------------------------------------------------------ */
-            /* TYPING                                                            */
-            /* ------------------------------------------------------------------ */
-
-            socket.on(
-                SOCKET_EVENTS.TYPING_START,
-                async (payload) => {
-
-                    await handleTypingStart(
-                        io,
-                        socket,
-                        payload
-                    );
-                }
-            );
-
-
-            socket.on(
-                SOCKET_EVENTS.TYPING_STOP,
-                async (payload) => {
-
-                    await handleTypingStop(
-                        io,
-                        socket,
-                        payload
-                    );
-                }
-            );
-
-
-            /* ------------------------------------------------------------------ */
-            /* READ RECEIPTS                                                      */
-            /* ------------------------------------------------------------------ */
-
-            socket.on(
-                SOCKET_EVENTS.MESSAGE_READ,
-                async (payload) => {
-
-                    try {
-
-                        await handleMessageRead(
-                            io,
-                            socket,
-                            payload
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            '[NEXUS SOCKET] Read receipt error:',
-                            error
-                        );
-                    }
-                }
-            );
-
-
-            /* ------------------------------------------------------------------ */
-            /* REACTIONS                                                          */
-            /* ------------------------------------------------------------------ */
-
-            socket.on(
-                SOCKET_EVENTS.MESSAGE_REACTION_ADD,
-                async (payload) => {
-
-                    try {
-
-                        await handleReactionAdd(
-                            io,
-                            socket,
-                            payload
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            '[NEXUS SOCKET] Reaction add error:',
-                            error
-                        );
-                    }
-                }
-            );
-
-
-            socket.on(
-                SOCKET_EVENTS.MESSAGE_REACTION_REMOVE,
-                async (payload) => {
-
-                    try {
-
-                        await handleReactionRemove(
-                            io,
-                            socket,
-                            payload
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            '[NEXUS SOCKET] Reaction remove error:',
-                            error
-                        );
-                    }
-                }
-            );
-
-
-            /* ------------------------------------------------------------------ */
-            /* PRESENCE                                                           */
-            /* ------------------------------------------------------------------ */
-
-            socket.on(
-                SOCKET_EVENTS.PRESENCE_UPDATE,
-                async (payload) => {
-
-                    try {
-
-                        await handlePresenceUpdate(
-                            io,
-                            socket,
-                            payload
-                        );
-
-                    } catch (error) {
-
-                        console.error(
-                            '[NEXUS SOCKET] Presence error:',
-                            error
-                        );
-                    }
-                }
-            );
-
-
-            /* ------------------------------------------------------------------ */
-            /* DISCONNECT                                                         */
-            /* ------------------------------------------------------------------ */
-
-            socket.on(
-                SOCKET_EVENTS.DISCONNECT,
-                async (reason) => {
-
-                    console.log(
-                        `[NEXUS SOCKET] Disconnected: ${user.username} (${reason})`
-                    );
-
-
-                    clearTypingForUser(
-                        user.id
-                    );
-
-
-                    const result =
-                        unregisterUserSocket(
-                            socket.id
-                        );
-
-
-                    if (
-                        result &&
-                        result.becameOffline
-                    ) {
-
-                        try {
-
-                            await updateUserPresence(
-                                user.id,
-                                {
-                                    status: 'offline'
-                                }
-                            );
-
-                        } catch (error) {
-
-                            console.error(
-                                '[NEXUS SOCKET] Presence cleanup error:',
-                                error
-                            );
-                        }
-
-
-                        io.emit(
-                            SOCKET_EVENTS.PRESENCE_CHANGED,
-                            {
-                                userId: user.id,
-                                username: user.username,
-                                status: 'offline',
-                                online: false,
-                                timestamp:
-                                    new Date().toISOString()
-                            }
-                        );
-                    }
-                }
-            );
-        }
-    );
-
-
-    console.log(
-        '[NEXUS SOCKET] Real-time communication layer initialized.'
-    );
-
-
-    return io;
+  }
 }
 
+/**
+ * ---------------------------------------------------------------
+ * NOTIFICATIONS
+ * ---------------------------------------------------------------
+ */
 
-/* -------------------------------------------------------------------------- */
-/* PUBLIC API                                                                 */
-/* -------------------------------------------------------------------------- */
+async function handleNotificationRead(
+  socket,
+  payload,
+  services,
+) {
+  try {
+    requireAuthenticated(socket);
 
-module.exports = {
-    initializeSockets,
+    const notificationId =
+      normalizeId(payload?.notificationId);
 
-    SOCKET_EVENTS,
+    if (!notificationId) {
+      return createSocketError(
+        "NOTIFICATION_ID_REQUIRED",
+        "A notification ID is required.",
+      );
+    }
 
-    isUserOnline,
+    const result =
+      await callService(
+        services,
+        "notificationService",
+        "markRead",
+        {
+          notificationId,
+          userId: socket.data.user.id,
+        },
+      );
 
-    getUserRoom,
+    if (!result) {
+      return createSocketError(
+        "NOTIFICATION_SERVICE_UNAVAILABLE",
+        "The notification service is temporarily unavailable.",
+      );
+    }
 
-    getConversationRoom,
+    socket.emit(
+      SOCKET_EVENTS.NOTIFICATION_UPDATED,
+      {
+        notificationId,
+        status: "read",
+        result,
+        timestamp: new Date().toISOString(),
+      },
+    );
 
-    getCommunityRoom
-};
+    return createSocketSuccess({
+      notificationId,
+      status: "read",
+    });
+  } catch {
+    return createSocketError(
+      "NOTIFICATION_UPDATE_FAILED",
+      "Unable to update notification.",
+    );
+  }
+}
+
+/**
+ * ---------------------------------------------------------------
+ * SYSTEM PING
+ * ---------------------------------------------------------------
+ */
+
+function handlePing(socket, payload) {
+  socket.emit(
+    SOCKET_EVENTS.CONNECTION_PONG,
+    {
+      clientTimestamp:
+        payload?.timestamp || null,
+
+      serverTimestamp:
+        new Date().toISOString(),
+
+      requestId:
+        getSocketRequestId(socket),
+    },
+  );
+
+  return createSocketSuccess();
+}
+
+/**
+ * ---------------------------------------------------------------
+ * PUBLIC REALTIME API
+ * ---------------------------------------------------------------
+ */
+
+export function createRealtimeServer({
+  httpServer,
+  config = {},
+  services = {},
+  logger = console,
+} = {}) {
+  if (!httpServer) {
+    throw new Error(
+      "createRealtimeServer requires an HTTP server.",
+    );
+  }
+
+  const corsOrigin =
+    config?.cors?.origin ||
+    config?.security?.corsOrigin ||
+    process.env.CORS_ORIGIN ||
+    true;
+
+  const maxConnections =
+    Number(
+      config?.realtime?.maxConnectionsPerUser,
+    ) ||
+    DEFAULT_MAX_CONNECTIONS_PER_USER;
+
+  const io = new SocketIOServer(
+    httpServer,
+    {
+      cors: {
+        origin: corsOrigin,
+        credentials: true,
+        methods: [
+          "GET",
+          "POST",
+        ],
+      },
+
+      transports: [
+        "websocket",
+        "polling",
+      ],
+
+      allowEIO3: false,
+
+      pingInterval:
+        Number(
+          config?.realtime?.pingInterval,
+        ) || 25_000,
+
+      pingTimeout:
+        Number(
+          config?.realtime?.pingTimeout,
+        ) || 20_000,
+
+      connectTimeout:
+        Number(
+          config?.realtime?.connectTimeout,
+        ) || 10_000,
+
+      maxHttpBufferSize:
+        Number(
+          config?.realtime?.maxHttpBufferSize,
+        ) || 1_000_000,
+
+      serveClient: true,
+    },
+  );
+
+  const state = createRealtimeState();
+
+  const connectionLimiter =
+    createConnectionLimiter(
+      maxConnections,
+    );
+
+  /**
+   * -------------------------------------------------------------
+   * AUTHENTICATION MIDDLEWARE
+   * -------------------------------------------------------------
+   */
+
+  io.use(
+    createAuthenticationMiddleware(
+      config,
+      logger,
+    ),
+  );
+
+  /**
+   * -------------------------------------------------------------
+   * CONNECTION
+   * -------------------------------------------------------------
+   */
+
+  io.on(
+    "connection",
+    async (socket) => {
+      const userId =
+        socket.data.user.id;
+
+      /**
+       * Connection protection.
+       */
+      if (
+        !connectionLimiter.add(
+          userId,
+          socket.id,
+        )
+      ) {
+        socket.emit(
+          SOCKET_EVENTS.CONNECTION_ERROR,
+          createSocketError(
+            "CONNECTION_LIMIT_REACHED",
+            "Maximum realtime connections reached for this account.",
+          ),
+        );
+
+        socket.disconnect(true);
+
+        return;
+      }
+
+      state.connections.set(
+        socket.id,
+        {
+          userId,
+          connectedAt:
+            socket.data.connectedAt,
+        },
+      );
+
+      logger?.info?.(
+        {
+          socketId: socket.id,
+          userId,
+          requestId:
+            socket.data.requestId,
+        },
+        "Realtime socket connected",
+      );
+
+      /**
+       * Every authenticated user receives a private room.
+       */
+      socket.join(
+        getUserRoom(userId),
+      );
+
+      await handlePresenceOnline(
+        socket,
+        services,
+        logger,
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * CONNECTION READY
+       * ---------------------------------------------------------
+       */
+
+      socket.emit(
+        SOCKET_EVENTS.CONNECTION_READY,
+        {
+          ok: true,
+
+          socket: {
+            id: socket.id,
+            version: SOCKET_VERSION,
+            connectedAt:
+              socket.data.connectedAt,
+          },
+
+          user: {
+            id: userId,
+            role:
+              socket.data.user.role,
+            roles:
+              socket.data.user.roles,
+          },
+
+          capabilities: [
+            "presence",
+            "private-events",
+            "room-events",
+            "messages",
+            "typing",
+            "delivery-receipts",
+            "read-receipts",
+            "notifications",
+            "reconnection",
+          ],
+
+          timestamp:
+            new Date().toISOString(),
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * CONVERSATION JOIN
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.CONVERSATION_JOIN,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleConversationJoin(
+              socket,
+              payload,
+              services,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * CONVERSATION LEAVE
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.CONVERSATION_LEAVE,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleConversationLeave(
+              socket,
+              payload,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * SEND MESSAGE
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.MESSAGE_SEND,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleMessageSend(
+              io,
+              socket,
+              payload,
+              services,
+              logger,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * DELIVERY RECEIPT
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.MESSAGE_DELIVERED,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleMessageDelivered(
+              io,
+              socket,
+              payload,
+              services,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * READ RECEIPT
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.MESSAGE_READ,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleMessageRead(
+              io,
+              socket,
+              payload,
+              services,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * TYPING START
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.TYPING_START,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleTyping(
+              io,
+              socket,
+              payload,
+              services,
+              SOCKET_EVENTS.TYPING_START,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * TYPING STOP
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.TYPING_STOP,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleTyping(
+              io,
+              socket,
+              payload,
+              services,
+              SOCKET_EVENTS.TYPING_STOP,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * NOTIFICATION READ
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.NOTIFICATION_READ,
+        async (payload, acknowledgement) => {
+          const result =
+            await handleNotificationRead(
+              socket,
+              payload,
+              services,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * CONNECTION PING
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        SOCKET_EVENTS.CONNECTION_PING,
+        (payload, acknowledgement) => {
+          const result =
+            handlePing(
+              socket,
+              payload,
+            );
+
+          if (
+            typeof acknowledgement ===
+            "function"
+          ) {
+            acknowledgement(result);
+          }
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * SOCKET ERROR
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        "error",
+        (error) => {
+          logger?.error?.(
+            {
+              err: error,
+              socketId: socket.id,
+              userId,
+            },
+            "Socket runtime error",
+          );
+        },
+      );
+
+      /**
+       * ---------------------------------------------------------
+       * DISCONNECT
+       * ---------------------------------------------------------
+       */
+
+      socket.on(
+        "disconnect",
+        async (reason) => {
+          connectionLimiter.remove(
+            userId,
+            socket.id,
+          );
+
+          state.connections.delete(
+            socket.id,
+          );
+
+          await handlePresenceOffline(
+            socket,
+            services,
+            connectionLimiter,
+            logger,
+          );
+
+          logger?.info?.(
+            {
+              socketId: socket.id,
+              userId,
+              reason,
+            },
+            "Realtime socket disconnected",
+          );
+        },
+      );
+    },
+  );
+
+  /**
+   * -------------------------------------------------------------
+   * SERVER-SIDE EVENT HELPERS
+   * -------------------------------------------------------------
+   *
+   * These methods allow services/controllers to push events to
+   * connected users without knowing anything about Socket.IO's
+   * internal implementation.
+   */
+
+  const realtime = {
+    io,
+
+    version: SOCKET_VERSION,
+
+    state,
+
+    events: SOCKET_EVENTS,
+
+    /**
+     * Send an event to one user.
+     */
+    emitToUser(userId, event, payload) {
+      if (!userId || !event) {
+        return false;
+      }
+
+      io.to(
+        getUserRoom(userId),
+      ).emit(
+        event,
+        payload,
+      );
+
+      return true;
+    },
+
+    /**
+     * Send an event to a conversation.
+     */
+    emitToConversation(
+      conversationId,
+      event,
+      payload,
+    ) {
+      if (!conversationId || !event) {
+        return false;
+      }
+
+      io.to(
+        getConversationRoom(
+          conversationId,
+        ),
+      ).emit(
+        event,
+        payload,
+      );
+
+      return true;
+    },
+
+    /**
+     * Send an event to everyone.
+     */
+    broadcast(event, payload) {
+      if (!event) {
+        return false;
+      }
+
+      io.emit(
+        event,
+        payload,
+      );
+
+      return true;
+    },
+
+    /**
+     * Check whether a user currently has
+     * at least one active realtime connection.
+     */
+    isUserOnline(userId) {
+      return connectionLimiter.isOnline(
+        userId,
+      );
+    },
+
+    /**
+     * Get number of active connections for
+     * a user.
+     */
+    getUserConnectionCount(userId) {
+      return connectionLimiter.count(
+        userId,
+      );
+    },
+
+    /**
+     * Get realtime server statistics.
+     */
+    getStats() {
+      return {
+        version: SOCKET_VERSION,
+        connectedSockets:
+          io.engine.clientsCount,
+
+        trackedConnections:
+          state.connections.size,
+
+        timestamp:
+          new Date().toISOString(),
+      };
+    },
+
+    /**
+     * Gracefully close Socket.IO.
+     */
+    async close() {
+      return new Promise(
+        (resolve) => {
+          io.close(() => {
+            logger?.info?.(
+              "Socket.IO server closed.",
+            );
+
+            resolve();
+          });
+        },
+      );
+    },
+  };
+
+  /**
+   * Make the realtime instance available to
+   * the service layer when desired.
+   */
+  if (
+    services &&
+    typeof services === "object"
+  ) {
+    services.realtime = realtime;
+  }
+
+  logger?.info?.(
+    {
+      version: SOCKET_VERSION,
+      transports: [
+        "websocket",
+        "polling",
+      ],
+      maxConnectionsPerUser:
+        maxConnections,
+    },
+    "NEXUS realtime server initialized",
+  );
+
+  return realtime;
+}
+
+/**
+ * ---------------------------------------------------------------
+ * DEFAULT EXPORT
+ * ---------------------------------------------------------------
+ */
+
+export default createRealtimeServer;
