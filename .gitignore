@@ -1,207 +1,580 @@
 # ============================================================
-# NEXUS DIVISIONS PLATFORM
-# Production-Grade Node.js / Express / Socket.IO Application
+# NEXUS OS
+# Nexus Buildsolutions Limited
+# Repository Protection & Environment Exclusions
 # ============================================================
 
 
-# ------------------------------------------------------------
-# Environment & Secrets
-# ------------------------------------------------------------
+# ============================================================
+# NODE / NPM
+# ============================================================
+
+node_modules/
+.npm/
+.npmrc.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.nyc_output/
+coverage/
+*.lcov
+
+
+# ============================================================
+# ENVIRONMENT & SECRETS
+# ============================================================
 
 .env
 .env.*
 !.env.example
+
+.env.local
+.env.development
+.env.test
+.env.staging
+.env.production
+.env.production.local
 
 *.secret
 *.secrets
 *.key
 *.pem
 *.crt
+*.cer
 *.p12
 *.pfx
 
-
-# ------------------------------------------------------------
-# Node.js Dependencies
-# ------------------------------------------------------------
-
-node_modules/
-.npm/
-.pnpm-store/
-.yarn/
-.yarn-cache/
-.yarn-integrity
+secrets/
+private/
+credentials/
+certificates/
 
 
-# ------------------------------------------------------------
-# Package Manager Logs
-# ------------------------------------------------------------
+# ============================================================
+# DATABASE / LOCAL DATA
+# ============================================================
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+data/
+database/
+databases/
+db/
+*.db
+*.sqlite
+*.sqlite3
+*.mongodb
+
+# Local database dumps
+*.dump
+*.bak
+*.backup
+
+# Migration runtime artifacts
+.migrations/
+migration-state/
+seed-state/
 
 
-# ------------------------------------------------------------
-# Runtime Logs
-# ------------------------------------------------------------
+# ============================================================
+# LOGS
+# ============================================================
 
 logs/
 *.log
 *.log.*
 log/
+tmp/
+temp/
+
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 
-# ------------------------------------------------------------
-# Runtime / Process Files
-# ------------------------------------------------------------
+# ============================================================
+# RUNTIME / PROCESS FILES
+# ============================================================
 
-pids/
 *.pid
 *.pid.lock
 *.seed
-*.pid.*
+*.pidfile
+
+pids/
+run/
+runtime/
 
 
-# ------------------------------------------------------------
-# Coverage / Testing
-# ------------------------------------------------------------
-
-coverage/
-.nyc_output/
-test-results/
-playwright-report/
-playwright/.cache/
-
-
-# ------------------------------------------------------------
-# Build / Distribution
-# ------------------------------------------------------------
+# ============================================================
+# BUILD / GENERATED OUTPUT
+# ============================================================
 
 dist/
 build/
 out/
-.tmp/
-temp/
+.output/
+.next/
+.nuxt/
+.svelte-kit/
 .cache/
 .parcel-cache/
 .turbo/
+.vite/
+
+*.tsbuildinfo
 
 
-# ------------------------------------------------------------
-# Development Tools
-# ------------------------------------------------------------
+# ============================================================
+# TEST ARTIFACTS
+# ============================================================
 
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-!.vscode/tasks.json
-!.vscode/launch.json
+test-results/
+test-results/**
+playwright-report/
+playwright-report/**
+blob-report/
+blob-report/**
+cypress/videos/
+cypress/screenshots/
 
-.idea/
-*.iml
+reports/
+artifacts/
+test-artifacts/
 
 
-# ------------------------------------------------------------
-# Operating System Files
-# ------------------------------------------------------------
+# ============================================================
+# GENERATED DOCUMENTS / EXPORTS
+# ============================================================
 
+generated/
+generated-files/
+exports/
+uploads/
+downloads/
+
+*.generated.*
+*.generated
+*.export
+*.exported
+
+
+# ============================================================
+# USER UPLOADS / LOCAL STORAGE
+# ============================================================
+
+storage/
+local-storage/
+user-uploads/
+media-cache/
+image-cache/
+
+
+# ============================================================
+# SOCKET / REALTIME RUNTIME ARTIFACTS
+# ============================================================
+
+socket-runtime/
+socket-state/
+socket-cache/
+
+*.socket
+*.sock
+
+
+# ============================================================
+# CACHE
+# ============================================================
+
+.cache/
+cache/
+caches/
+
+*.cache
+
+
+# ============================================================
+# OPERATING SYSTEM FILES
+# ============================================================
+
+# macOS
 .DS_Store
-.DS_Store?
+.AppleDouble
+.LSOverride
 ._*
+
+# macOS folder metadata
+.DocumentRevisions-V100
+.fseventsd
 .Spotlight-V100
+.TemporaryItems
 .Trashes
-ehthumbs.db
+.VolumeIcon.icns
+
+# Windows
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
 Desktop.ini
+$RECYCLE.BIN/
 
-
-# ------------------------------------------------------------
-# Temporary / Backup Files
-# ------------------------------------------------------------
-
+# Windows installer / temporary files
 *.tmp
 *.temp
 *.bak
-*.backup
 *.old
-*.orig
-*~
-*.swp
-*.swo
 
 
-# ------------------------------------------------------------
-# Database / Local Development Data
-# ------------------------------------------------------------
+# ============================================================
+# LINUX
+# ============================================================
 
-data/
-database/
-db/
-*.sqlite
-*.sqlite3
-*.db
+.directory
 
 
-# ------------------------------------------------------------
-# Uploaded / Generated Media
-# ------------------------------------------------------------
+# ============================================================
+# EDITORS / IDEs
+# ============================================================
 
-uploads/
-storage/
-media/
-public/uploads/
-public/storage/
+# Visual Studio Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 
-
-# ------------------------------------------------------------
-# Local AI / Model Data
-# ------------------------------------------------------------
-
-models/
-.ai/
-.ai-cache/
-
-
-# ------------------------------------------------------------
-# Deployment / Platform Files
-# ------------------------------------------------------------
-
-.vercel/
-.netlify/
-.render/
-.heroku/
-
-
-# ------------------------------------------------------------
-# Generated Documentation
-# ------------------------------------------------------------
-
-docs/generated/
-
-
-# ------------------------------------------------------------
-# Security / Certificates
-# ------------------------------------------------------------
-
-certs/
-certificates/
-secrets/
-
-
-# ------------------------------------------------------------
-# OS / Editor Temporary Files
-# ------------------------------------------------------------
-
-*.code-workspace
+# VS Code local history
 .history/
 
+# JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
 
-# ------------------------------------------------------------
-# Miscellaneous
-# ------------------------------------------------------------
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
 
-.Dockerignore
-docker-compose.override.yml
+# Vim
+*.swp
+*.swo
+*.swn
+*~
+
+# Emacs
+.#*
+\#*\#
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+
+# ============================================================
+# TYPESCRIPT / JAVASCRIPT TOOLING
+# ============================================================
+
+*.tsbuildinfo
+.eslintcache
+
+# Babel
+.babel-cache/
+
+# Jest
+.jest-cache/
+
+# ESLint
+.eslintcache
+
+
+# ============================================================
+# LOCAL DEVELOPMENT
+# ============================================================
+
+.dev/
+.development/
+.local/
+.local-dev/
+
+.localhost/
+*.local.json
+
+
+# ============================================================
+# DOCKER / LOCAL CONTAINERS
+# ============================================================
+
+.docker/
+docker-data/
+docker-volumes/
+
+*.docker-data
+*.container-data
+
+
+# ============================================================
+# CLOUD / DEPLOYMENT LOCAL ARTIFACTS
+# ============================================================
+
+.render/
+.vercel/
+.netlify/
+
+# Do not commit provider credentials
+.aws/
+.gcloud/
+.azure/
+
+.aws-credentials
+gcloud-credentials.json
+service-account*.json
+
+
+# ============================================================
+# SECURITY SCANNING / LOCAL SECURITY OUTPUT
+# ============================================================
+
+.security/
+security-reports/
+security-results/
+
+*.sarif
+*.security.json
+
+
+# ============================================================
+# PERFORMANCE / PROFILING
+# ============================================================
+
+profiles/
+profiling/
+performance-results/
+
+*.cpuprofile
+*.heapprofile
+
+
+# ============================================================
+# BACKUP FILES
+# ============================================================
+
+backup/
+backups/
+*.backup
+*.bak
+*.old
+*.orig
+*.save
+*.swp
+
+
+# ============================================================
+# GENERATED API / OPENAPI OUTPUT
+# ============================================================
+
+.openapi-generated/
+api-generated/
+swagger-generated/
+
+
+# ============================================================
+# LOCAL CERTIFICATE AUTHORITIES
+# ============================================================
+
+*.ca
+*.ca-key
+*.csr
+*.key.pem
+*.cert.pem
+
+
+# ============================================================
+# LOCAL DEVELOPMENT CERTIFICATES
+# ============================================================
+
+dev-cert/
+dev-certs/
+local-cert/
+local-certs/
+
+
+# ============================================================
+# MACHINE-SPECIFIC CONFIGURATION
+# ============================================================
+
+machine.config.*
+host.config.*
+local.config.*
+
+*.machine.json
+
+
+# ============================================================
+# TEMPORARY ARCHITECTURE / DESIGN FILES
+# ============================================================
+
+*.drawio.bkp
+*.tmp.json
+*.draft.json
+*.draft
+
+
+# ============================================================
+# AI / MODEL LOCAL ARTIFACTS
+# ============================================================
+
+.ai-cache/
+.ai-runtime/
+model-cache/
+embedding-cache/
+
+
+# ============================================================
+# LARGE LOCAL ASSETS
+# ============================================================
+
+*.psd
+*.ai
+*.sketch
+*.fig
+*.blend
+
+# Temporary video/audio exports
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+*.aiff
+
+
+# ============================================================
+# ARCHIVE FILES CREATED LOCALLY
+# ============================================================
+
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+
+# ============================================================
+# NEXUS OS INTERNAL RUNTIME
+# ============================================================
+
+.nexus/
+.nexus-runtime/
+.nexus-cache/
+.nexus-state/
+
+.nexus-local.json
+.nexus-runtime.json
+
+platform-runtime/
+platform-cache/
+platform-state/
+
+health-cache/
+audit-runtime/
+event-runtime/
+job-runtime/
+
+
+# ============================================================
+# BACKGROUND WORKER RUNTIME
+# ============================================================
+
+worker-runtime/
+worker-state/
+worker-cache/
+
+queue-runtime/
+queue-state/
+
+
+# ============================================================
+# LOCAL SCHEDULER STATE
+# ============================================================
+
+scheduler-runtime/
+scheduler-state/
+
+
+# ============================================================
+# LOCAL MESSAGE / NOTIFICATION STATE
+# ============================================================
+
+notification-runtime/
+notification-state/
+message-runtime/
+message-cache/
+
+
+# ============================================================
+# LOCAL SEARCH INDEXES
+# ============================================================
+
+search-index/
+search-cache/
+indexes/
+
+
+# ============================================================
+# LOCAL ANALYTICS DATA
+# ============================================================
+
+analytics-cache/
+analytics-runtime/
+analytics-state/
+
+
+# ============================================================
+# LOCAL UPLOAD PROCESSING
+# ============================================================
+
+upload-temp/
+upload-processing/
+upload-cache/
+
+
+# ============================================================
+# OS / PACKAGE MANAGER LOCK OVERRIDES
+# ============================================================
+
+# IMPORTANT:
+# package-lock.json IS intentionally NOT ignored.
+# It must remain committed for reproducible production installs.
+
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+
+# ============================================================
+# IMPORTANT NEXUS OS FILES THAT MUST REMAIN TRACKED
+# ============================================================
+
+# The following files/directories are intentionally NOT ignored:
+#
+# package.json
+# package-lock.json
+# README.md
+# .env.example
+# public/
+# server/
+# scripts/
+# tests/
+# core/
+# modules/
+# apps/
+#
+# These are part of the actual platform source and architecture.
+# ============================================================
