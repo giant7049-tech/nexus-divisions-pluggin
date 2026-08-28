@@ -1682,6 +1682,35 @@ export function createRealtimeServer({
 
 /**
  * ---------------------------------------------------------------
+ * BOOTSTRAP EXPORT
+ * ---------------------------------------------------------------
+ */
+
+export async function registerSocketServer(io, options = {}) {
+  if (!io || typeof io.on !== "function") {
+    return null;
+  }
+
+  const config = options.config || {};
+  const services = options.services || {};
+  const logger = options.logger || console;
+
+  const realtime = createRealtimeServer({
+    httpServer: io.httpServer || io._httpServer || null,
+    config,
+    services,
+    logger,
+  });
+
+  if (realtime && typeof realtime === "object") {
+    io.realtime = realtime;
+  }
+
+  return io;
+}
+
+/**
+ * ---------------------------------------------------------------
  * DEFAULT EXPORT
  * ---------------------------------------------------------------
  */

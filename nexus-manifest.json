@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
 
   "platform": {
-    "id": "nexus-os",
+    "id": "nexos-os",
     "name": "NEXUS OS",
     "displayName": "NEXUS OS",
     "organization": "Nexus Buildsolutions Limited",
-    "description": "Unified software operating platform connecting identity, customers, professionals, services, jobs, marketplace, property, construction, communications, payments, intelligence and automation.",
+    "description": "Unified digital operating platform connecting identity, customers, professionals, services, jobs, marketplace, property, construction, communications, payments, intelligence and automation.",
     "classification": "production-platform",
     "status": "active-development",
     "architectureVersion": "1.0.0",

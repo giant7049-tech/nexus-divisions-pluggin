@@ -2014,15 +2014,12 @@ async function middlewarePlugin(
    * ----------------------------------------------------------
    * ERROR HANDLING
    * ----------------------------------------------------------
+   *
+   * Global error/not-found behavior is centralized in app.js.
+   * Registering them here would override the application-level
+   * handlers and trigger duplicate route registration errors.
+   * ----------------------------------------------------------
    */
-
-  fastify.setErrorHandler(
-    globalErrorHandler,
-  );
-
-  fastify.setNotFoundHandler(
-    notFoundHandler,
-  );
 
   /**
    * ----------------------------------------------------------
@@ -2090,6 +2087,16 @@ async function middlewarePlugin(
  * EXPORTED FASTIFY PLUGIN
  * ============================================================
  */
+
+export async function registerMiddleware(
+  fastify,
+  options = {},
+) {
+  await fastify.register(
+    middlewarePlugin,
+    options,
+  );
+}
 
 export default fp(
   middlewarePlugin,

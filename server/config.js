@@ -137,7 +137,7 @@ const appVersion = stringValue("APP_VERSION", "1.0.0");
 
 const nodeEnvironment = environment;
 
-const config = {
+export const config = {
   /* ==========================================================
      PLATFORM IDENTITY
      ========================================================== */

@@ -1,11 +1,11 @@
 {
-  "name": "nexus-os",
+  "name": "nexos-os",
   "version": "1.0.0",
   "private": true,
-  "description": "NEXUS OS — Nexus Buildsolutions Limited unified digital operating platform.",
+  "description": "NEXUS OS — unified digital operating platform for Nexus Buildsolutions Limited.",
   "keywords": [
-    "nexus",
-    "nexus-os",
+    "nexos",
+    "nexos-os",
     "nexus-buildsolutions",
     "construction",
     "engineering",

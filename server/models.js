@@ -1883,6 +1883,45 @@ export function getDatabaseHealth() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* DATABASE BOOTSTRAP                                                        */
+/* -------------------------------------------------------------------------- */
+
+export async function connectDatabase() {
+  const configuredUrl =
+    process.env.DATABASE_URL ||
+    process.env.MONGODB_URI ||
+    "mongodb://127.0.0.1:27017/nexus_os";
+
+  if (
+    process.env.DATABASE_DISABLED === "true" ||
+    process.env.DATABASE_DISABLED === "1"
+  ) {
+    return mongoose.connection;
+  }
+
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
+  }
+
+  await mongoose.connect(configuredUrl, {
+    serverSelectionTimeoutMS: 5000,
+    retryWrites: true,
+    retryReads: true,
+  });
+
+  return mongoose.connection;
+}
+
+export async function disconnectDatabase() {
+  if (mongoose.connection.readyState === 0) {
+    return mongoose.connection;
+  }
+
+  await mongoose.disconnect();
+  return mongoose.connection;
+}
+
+/* -------------------------------------------------------------------------- */
 /* EXPORTS                                                                     */
 /* -------------------------------------------------------------------------- */
 

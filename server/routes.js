@@ -2651,6 +2651,19 @@ async function searchRoutes(fastify) {
    ============================================================ */
 
 /**
+ * Compatibility export used by app.js.
+ */
+export async function registerRoutes(
+  fastify,
+  options = {},
+) {
+  await fastify.register(
+    routes,
+    options,
+  );
+}
+
+/**
  * Main route plugin.
  *
  * app.js will register this plugin with Fastify.
@@ -2666,12 +2679,9 @@ export default async function routes(
   void options;
 
   /* ----------------------------------------------------------
-     Health endpoints
+     Health endpoints are registered in app.js to avoid
+     duplicate /health, /health/live, and /health/ready routes.
      ---------------------------------------------------------- */
-
-  await fastify.register(
-    healthRoutes,
-  );
 
   /* ----------------------------------------------------------
      API modules
@@ -2763,51 +2773,10 @@ export default async function routes(
   );
 
   /**
-   * Explicit unsupported API response.
-   *
-   * This is preferable to returning a generic HTML 404 for
-   * an API client.
+   * Not-found and error handling remain centralized in app.js.
+   * Registering them here causes duplicate Fastify route hooks and
+   * blocks app startup.
    */
-  fastify.setNotFoundHandler(
-    async (request, reply) => {
-      const path = request.url
-        .split("?")[0];
-
-      if (
-        path.startsWith("/api/")
-      ) {
-        return fail(
-          reply,
-          404,
-          "API_ROUTE_NOT_FOUND",
-          "The requested API endpoint does not exist.",
-        );
-      }
-
-      return reply.callNotFound();
-    },
-  );
-
-  /**
-   * Route-level error boundary.
-   *
-   * The global error handler in app.js remains authoritative,
-   * but this handler ensures route-level failures never leak
-   * internal implementation details.
-   */
-  fastify.setErrorHandler(
-    async (
-      error,
-      request,
-      reply,
-    ) => {
-      return handleRouteError(
-        request,
-        reply,
-        error,
-      );
-    },
-  );
 }
 
 /* ============================================================
