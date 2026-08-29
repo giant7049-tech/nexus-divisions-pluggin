@@ -878,11 +878,12 @@ export async function createApp(
       options.trustProxy ??
       DEFAULT_OPTIONS.trustProxy,
 
-    disableRequestLogging: false,
+    logController: {
+      disableRequestLogging: false,
+      requestIdLogLabel: 'requestId'
+    },
 
-    requestIdHeader: 'x-request-id',
-
-    requestIdLogLabel: 'requestId'
+    requestIdHeader: 'x-request-id'
   });
 
 
