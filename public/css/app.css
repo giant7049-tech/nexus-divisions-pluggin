@@ -1276,10 +1276,69 @@ h4 {
    17. HERO
    ============================================================ */
 
+.technology-banner {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: var(--space-8);
+  padding: clamp(1.4rem, 3vw, 2rem);
+  border: 1px solid rgba(124, 140, 255, 0.2);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at top right, rgba(124, 140, 255, 0.2), transparent 30%),
+    linear-gradient(135deg, rgba(12, 18, 36, 0.96), rgba(16, 22, 38, 0.86));
+  box-shadow: 0 30px 80px rgba(10, 14, 28, 0.45);
+}
+
+.technology-banner__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.technology-banner__content h2 {
+  margin: 0;
+  max-width: 700px;
+  font-size: clamp(1.7rem, 2.2vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.06em;
+}
+
+.technology-banner__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.tech-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+}
+
+.tech-metric strong {
+  font-size: clamp(1.1rem, 2vw, 1.7rem);
+  letter-spacing: -0.04em;
+  color: #dfe6ff;
+}
+
+.tech-metric span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .hero-section {
   position: relative;
 
-  min-height: 350px;
+  min-height: 420px;
 
   display: flex;
   align-items: center;
@@ -1289,22 +1348,23 @@ h4 {
   margin-bottom: var(--space-8);
   padding: clamp(2rem, 5vw, 4rem);
 
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(124, 140, 255, 0.25);
   border-radius: var(--radius-xl);
 
   background:
     radial-gradient(
       circle at 80% 50%,
-      rgba(124, 140, 255, 0.12),
-      transparent 26rem
+      rgba(124, 140, 255, 0.22),
+      transparent 25rem
     ),
+    radial-gradient(circle at 15% 20%, rgba(17, 204, 255, 0.12), transparent 20rem),
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.045),
-      rgba(255, 255, 255, 0.015)
+      rgba(255, 255, 255, 0.058),
+      rgba(255, 255, 255, 0.02)
     );
 
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 24px 60px rgba(15, 22, 42, 0.42);
 }
 
 .hero-section__content {
