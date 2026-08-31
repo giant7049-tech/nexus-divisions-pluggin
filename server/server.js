@@ -76,13 +76,9 @@ let shuttingDown = false;
  * ============================================================
  */
 
-const HOST = config.server?.host ?? '0.0.0.0';
+const HOST = '0.0.0.0';
 
-const PORT = Number(
-  process.env.PORT ??
-  config.server?.port ??
-  3000
-);
+const PORT = Number(process.env.PORT || 10000);
 
 const NODE_ENV =
   config.environment ??
@@ -281,13 +277,7 @@ async function startServer() {
     await new Promise((resolve, reject) => {
       httpServer.once('error', reject);
 
-      httpServer.listen(
-        {
-          host: HOST,
-          port: PORT,
-        },
-        resolve
-      );
+      httpServer.listen(PORT, HOST, resolve);
     });
 
 
