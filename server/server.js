@@ -155,9 +155,7 @@ async function startServer() {
      * server becomes the transport layer shared with Socket.IO.
      */
 
-    httpServer = http.createServer(
-      app.server
-    );
+    httpServer = app.server;
 
 
     /**
@@ -275,9 +273,20 @@ async function startServer() {
      */
 
     await new Promise((resolve, reject) => {
-      httpServer.once('error', reject);
+      app.listen(
+        {
+          port: PORT,
+          host: HOST,
+        },
+        (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
 
-      httpServer.listen(PORT, HOST, resolve);
+          resolve();
+        }
+      );
     });
 
 
