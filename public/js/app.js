@@ -1,3 +1,9 @@
+import {
+  AUTH_PUBLIC_ROUTES,
+  resolveAuthRoute,
+  shouldRequireAuthentication,
+} from "./auth-gate.js";
+
 /**
  * NEXUS OS
  * Client Application Layer
@@ -30,7 +36,7 @@
 const NEXUS = Object.freeze({
   name: "NEXUS OS",
   version: "1.0.0",
-  apiBase: "/api",
+  apiBase: "/api/v1",
   socketPath: "/socket.io",
   requestTimeout: 15000,
   reconnectDelay: 3000,
@@ -1002,13 +1008,14 @@ function renderUser(user = state.user) {
 
 async function loadAuthenticationState() {
   try {
-    const response = await api.get("/auth/session");
+    const response = await api.get("/auth/me");
 
     const authenticated =
       Boolean(
         response?.authenticated ??
         response?.data?.authenticated ??
-        response?.user,
+        response?.user ??
+        response?.data?.user,
       );
 
     state.authenticated = authenticated;
@@ -1956,11 +1963,40 @@ function updateNavigationState(route) {
  * When their server routes and client views are implemented,
  * this dispatcher becomes the integration point.
  */
+function syncAuthGate(route = state.route) {
+  const resolvedRoute = resolveAuthRoute(route, state.authenticated);
+
+  const shell = document.querySelector(".app-shell");
+  const isGuest = !state.authenticated && shouldRequireAuthentication(route, state.authenticated);
+
+  shell?.classList.toggle("auth-gate-active", isGuest);
+
+  const authView = document.getElementById("auth-gate-view");
+  if (authView) {
+    authView.hidden = !isGuest;
+  }
+
+  if (resolvedRoute !== route) {
+    navigate(resolvedRoute, { replace: true });
+    return false;
+  }
+
+  return true;
+}
+
 function handleRoute(route) {
-  updateNavigationState(route);
+  const normalizedRoute = resolveAuthRoute(route, state.authenticated);
+
+  if (normalizedRoute !== route) {
+    navigate(normalizedRoute, { replace: true });
+    return;
+  }
+
+  syncAuthGate(normalizedRoute);
+  updateNavigationState(normalizedRoute);
 
   emit("route:load", {
-    route,
+    route: normalizedRoute,
   });
 
   /*
@@ -1969,10 +2005,75 @@ function handleRoute(route) {
   window.dispatchEvent(
     new CustomEvent("nexus:route", {
       detail: {
-        route,
+        route: normalizedRoute,
       },
     }),
   );
+}
+
+async function submitAuthForm(mode, form) {
+  const formData = new FormData(form);
+  const values = Object.fromEntries(formData.entries());
+
+  const payload = {
+    email: String(values.email || "").trim(),
+    password: String(values.password || "").trim(),
+  };
+
+  if (mode === "register") {
+    payload.name = String(values.name || "").trim();
+  }
+
+  if (!payload.email || !payload.password || (mode === "register" && !payload.name)) {
+    showToast(
+      mode === "register"
+        ? "Please complete all fields to create your account."
+        : "Please enter your email and password.",
+      {
+        type: "error",
+        title: mode === "register" ? "Create account" : "Sign in",
+      },
+    );
+    return;
+  }
+
+  try {
+    const endpoint = mode === "register" ? "/auth/register" : "/auth/login";
+    const response = await api.post(endpoint, payload);
+
+    const payloadData = response?.data ?? response;
+    const user = payloadData?.user ?? payloadData?.profile ?? null;
+
+    state.authenticated = true;
+    state.user = user;
+
+    renderUser();
+    emit("auth:ready", {
+      authenticated: true,
+      user,
+    });
+
+    showToast(
+      mode === "register"
+        ? "Your account has been created successfully."
+        : "You are now signed in.",
+      {
+        type: "success",
+        title: mode === "register" ? "Welcome" : "Signed in",
+      },
+    );
+
+    navigate("/", { replace: true });
+    handleRoute("/");
+  } catch (error) {
+    showToast(
+      getErrorMessage(error, "Authentication failed."),
+      {
+        type: "error",
+        title: mode === "register" ? "Create account" : "Sign in",
+      },
+    );
+  }
 }
 
 /* ============================================================
@@ -2295,6 +2396,27 @@ function handleClick(event) {
     }
   }
 
+  const authTab = event.target.closest("[data-auth-mode]");
+  if (authTab) {
+    const mode = authTab.dataset.authMode;
+    const tabs = $$("[data-auth-mode]");
+    const forms = $$("[data-auth-form]");
+
+    tabs.forEach((tab) => {
+      const selected = tab.dataset.authMode === mode;
+      tab.classList.toggle("is-active", selected);
+      tab.setAttribute("aria-selected", selected ? "true" : "false");
+    });
+
+    forms.forEach((form) => {
+      const matches = form.dataset.authForm === mode;
+      form.hidden = !matches;
+      form.classList.toggle("is-active", matches);
+    });
+
+    return;
+  }
+
   const createOption =
     event.target.closest("[data-create-type]");
 
@@ -2386,6 +2508,17 @@ function handleWorkspaceSwitcher(element) {
   emit("workspace:switcher", {
     open: !expanded,
   });
+}
+
+function handleSubmit(event) {
+  const form = event.target.closest("[data-auth-form]");
+  if (!form) {
+    return;
+  }
+
+  event.preventDefault();
+  const mode = form.dataset.authForm;
+  submitAuthForm(mode, form);
 }
 
 function handleCreateAction(type) {
@@ -2583,6 +2716,11 @@ function initializeEventListeners() {
   );
 
   document.addEventListener(
+    "submit",
+    handleSubmit,
+  );
+
+  document.addEventListener(
     "keydown",
     handleGlobalKeydown,
   );
@@ -2674,6 +2812,11 @@ async function boot() {
      * Load authoritative state from the server.
      */
     await bootstrapServerState();
+
+    const redirectTarget = resolveAuthRoute(state.route, state.authenticated);
+    if (redirectTarget !== state.route) {
+      navigate(redirectTarget, { replace: true });
+    }
 
     handleRoute(state.route);
 

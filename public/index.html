@@ -41,7 +41,7 @@
 
   <link
     rel="stylesheet"
-    href="/css/app.css"
+    href="/css/app.css?v=2026-08-31-nexus-os-ui-polish"
   />
 
   <title>NEXUS OS</title>
@@ -737,6 +737,90 @@
         class="app-content"
         tabindex="-1"
       >
+
+        <section
+          id="auth-gate-view"
+          class="auth-gate"
+          hidden
+          aria-label="Authentication required"
+        >
+          <div class="auth-gate__panel">
+            <div class="auth-gate__brand">
+              <span class="brand-mark" aria-hidden="true"><span>N</span></span>
+              <div>
+                <strong>NEXUS</strong>
+                <small>OS</small>
+              </div>
+            </div>
+
+            <div class="auth-gate__intro">
+              <span class="eyebrow">SECURE ACCESS</span>
+              <h2>Welcome to the unified operating platform.</h2>
+              <p>
+                Sign in to manage projects, professionals, services, and opportunities
+                inside your NEXUS workspace.
+              </p>
+            </div>
+
+            <div class="auth-gate__switcher" role="tablist" aria-label="Authentication mode">
+              <button
+                type="button"
+                class="auth-gate__tab is-active"
+                data-auth-mode="login"
+                role="tab"
+                aria-selected="true"
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                class="auth-gate__tab"
+                data-auth-mode="register"
+                role="tab"
+                aria-selected="false"
+              >
+                Create account
+              </button>
+            </div>
+
+            <form class="auth-form is-active" data-auth-form="login">
+              <label>
+                <span>Email</span>
+                <input type="email" name="email" placeholder="you@company.com" autocomplete="email" required />
+              </label>
+
+              <label>
+                <span>Password</span>
+                <input type="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
+              </label>
+
+              <button type="submit" class="button button--primary auth-form__submit">
+                Sign in to NEXUS
+              </button>
+            </form>
+
+            <form class="auth-form" data-auth-form="register" hidden>
+              <label>
+                <span>Full name</span>
+                <input type="text" name="name" placeholder="Your full name" autocomplete="name" required />
+              </label>
+
+              <label>
+                <span>Email</span>
+                <input type="email" name="email" placeholder="you@company.com" autocomplete="email" required />
+              </label>
+
+              <label>
+                <span>Password</span>
+                <input type="password" name="password" placeholder="Create a secure password" autocomplete="new-password" required />
+              </label>
+
+              <button type="submit" class="button button--primary auth-form__submit">
+                Create my account
+              </button>
+            </form>
+          </div>
+        </section>
 
         <!-- Page announcement / system state -->
 
@@ -1824,7 +1908,7 @@
        ========================================================== -->
 
   <script
-    src="/js/app.js"
+    src="/js/app.js?v=2026-08-31-nexus-os-ui-polish"
     type="module"
     defer
   ></script>
